@@ -223,6 +223,12 @@ public:
     return m_last_fence_version < 0xFFFF;
   }
 
+  int get_size() {
+    return m_max_cnt;
+  }
+
+  bool check_range(int idx);
+
 private:
   bool is_later_entry(int first_fence_entry, int entry);
   void print_fence_entries(enum fence_type ft = FENCE_FULL);

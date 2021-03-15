@@ -287,3 +287,14 @@ void rob_c::print_fence_entries(fence_type ft) {
 void rob_c::set_wb_empty(bool state) {
   m_wb_empty = state;
 }
+
+bool rob_c::check_range(int idx) {
+  if (m_first_entry <= m_last_entry) {
+    return (m_first_entry <= idx && idx <= m_last_entry);
+  } else {
+    return (idx >= m_first_entry || idx <= m_last_entry);
+  }
+}
+
+
+

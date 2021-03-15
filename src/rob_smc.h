@@ -102,10 +102,14 @@ public:
    *  \return std::list<uop_c *>* .
    */
   vector<uop_c*>* get_n_uops_in_ready_order(int n, Counter cur_core_cycle);
+  
+  int get_next_sched_rob_entry(int thread_id);
+  void inc_next_sched_rob_entry(int thread_id);
 
 private:
   int m_knob_num_threads; /**< max threads per core */
   rob_c** m_thread_robs; /**< reorder buffer per thread */
+  int* m_next_sched_uop; /**< next uop to be scheduled in rob in order */
   list<int> m_free_list; /**< thread rob pool */
   vector<uop_c*> m_uop_list; /**< retireable uop list */
   int m_core_id; /**< core id */

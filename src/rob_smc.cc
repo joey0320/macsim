@@ -78,6 +78,8 @@ smc_rob_c::smc_rob_c(Unit_Type type, int core_id, macsim_c* simBase) {
   }
 
   m_thread_robs = new rob_c*[m_knob_num_threads];
+  m_next_sched_uop = new int[m_knob_num_threads];
+
   ASSERT(m_thread_robs);
 
   for (int i = 0; i < m_knob_num_threads; ++i) {
@@ -85,6 +87,8 @@ smc_rob_c::smc_rob_c(Unit_Type type, int core_id, macsim_c* simBase) {
     ASSERT(m_thread_robs[i]);
 
     m_free_list.push_back(i);
+
+    m_next_sched_uop[i] = 0;
   }
 
   m_core_id = core_id;
@@ -96,6 +100,7 @@ smc_rob_c::~smc_rob_c() {
     delete m_thread_robs[i];
   }
   delete[] m_thread_robs;
+  delete[] m_next_sched_uop;
 }
 
 // get one reorder buffer for a thread
@@ -207,4 +212,30 @@ vector<uop_c*>* smc_rob_c::get_n_uops_in_ready_order(int n,
   }
 
   return &m_uop_list;
+}
+
+
+int smc_rob_c::get_next_sched_rob_entry(int thread_id) {
+  assert(m_thread_to_rob_map.find(thread_id) != m_thread_to_rob_map.end());
+
+  int idx = m_thread_to_rob_map[thread_id];
+  return m_next_sched_uop[idx];
+}
+
+void smc_rob_c::inc_next_sched_rob_entry(int thread_id) {
+  assert(m_thread_to_rob_map.find(thread_id) != m_thread_to_rob_map.end());
+
+  int idx = m_thread_to_rob_map[thread_id];
+  rob_c *rob = m_thread_robs[idx];
+  int &entry = m_next_sched_uop[idx];
+  int sz = rob->get_size();
+
+  assert(rob->check_range(entry));
+
+/* if (entry != (rob->last_rob() - 1 + sz) % sz) { */
+/* entry = (entry + 1) % sz; */
+/* } */
+  entry = (entry + 1) % sz;
+
+  assert(rob->check_range(entry));
 }
