@@ -135,6 +135,8 @@ using namespace CONTROLLER;
 bool g_enable_thread_instrument[MAX_THREADS];
 bool g_enable_instrument = false;
 
+ofstream logfile;
+
 /////////////////////////////////////////////////////////////////////////////////////////
 // knob variables (Knob_xxx_yyy)
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -155,6 +157,7 @@ Knob(UINT64, Knob_skip_thread0, "skip_thread0", "0", "skip thread 0");
 Knob(UINT64, Knob_max, "max", "0", "Max number of instruction to collect");
 Knob(UINT64, Knob_rtn_min, "rmin", "0", "Max number of function calls to collect data");
 Knob(UINT64, Knob_rtn_max, "rmax", "0", "Max number of function calls to collect data");
+Knob(string, Knob_log_file, "log", "log.out", "name of the logfile");
 
 //Added by Lifeng
 // knob variables and global variable
@@ -164,6 +167,10 @@ bool sim_begin[MAX_THREADS] = {false};
 bool sim_end[MAX_THREADS] = {false};
 bool thread_flushed[MAX_THREADS] = {false};
 Knob(bool, Knob_manual_simpoint, "manual", "0", "start/stop trace generation at manually added SIM_BEGIN()/SIM_END function call");
+
+//Added by Joonho
+bool record_pim[MAX_THREADS] = {false};
+Knob(bool, Knob_enable_pim, "pim", "0", "start/stop pim record by manually adding PIM_FUNC_START, PIM_FUNC_END");
 
 // variables for HMC 2.0 atomic instruction simulations
 // should be disabled in normal cases
@@ -876,6 +883,11 @@ void instrument(INS ins)
                    IARG_THREAD_ID, IARG_END);
   }
 
+  // added by Joonho
+  if (Knob_enable_pim.Value() && record_pim[tid]) {
+    info->is_pim = true;
+  }
+
   // ----------------------------------------
   // add a static instruction (per thread id)
   // ----------------------------------------
@@ -1127,6 +1139,8 @@ void finish(void)
   }
   
   configFile.close();
+
+  logfile.close();
 
   /**< Final print to standard output */
   for (unsigned ii = 0; ii < thread_count; ++ii)
@@ -1386,8 +1400,31 @@ VOID RtnHMC(CHAR *name, ADDRINT func, ADDRINT ret, ADDRINT target_addr)
   hmc_target_addr = target_addr;
   curr_caller_pc = pc;
 }
+
+VOID RtnPIMStart(ADDRINT arg)
+{
+  if (arg == 0 || !Knob_enable_pim.Value())
+    return;
+
+  THREADID tid = threadMap[PIN_ThreadId()];
+  cout << "Start Pim recording for tid : " << tid << endl;
+  record_pim[tid] = true;
+}
+
+VOID RtnPIMEnd(ADDRINT arg)
+{
+  if (arg == 0 || !Knob_enable_pim.Value())
+    return;
+
+  THREADID tid = threadMap[PIN_ThreadId()];
+  cout << "End Pim recording for tid : " << tid << endl;
+  record_pim[tid] = false;
+}
+
 VOID Image(IMG img, VOID *v)
 {
+/* cout << "Image called" << endl; */
+
   RTN rtn = RTN_FindByName(img, "SIM_BEGIN");
   if (RTN_Valid(rtn))
   {
@@ -1403,6 +1440,22 @@ VOID Image(IMG img, VOID *v)
     RTN_InsertCall(rtn2, IPOINT_BEFORE, (AFUNPTR)RtnEnd,
                    IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
     RTN_Close(rtn2);
+  }
+
+  RTN pim_start_rtn = RTN_FindByName(img, "PIM_FUNC_START");
+  if (RTN_Valid(pim_start_rtn)) {
+    RTN_Open(pim_start_rtn);
+    RTN_InsertCall(pim_start_rtn, IPOINT_AFTER, (AFUNPTR)RtnPIMStart,
+        IARG_FUNCRET_EXITPOINT_VALUE, IARG_END);
+    RTN_Close(pim_start_rtn);
+  }
+
+  RTN pim_end_rtn = RTN_FindByName(img, "PIM_FUNC_END");
+  if (RTN_Valid(pim_end_rtn)) {
+    RTN_Open(pim_end_rtn);
+    RTN_InsertCall(pim_end_rtn, IPOINT_BEFORE, (AFUNPTR)RtnPIMEnd,
+        IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
+    RTN_Close(pim_end_rtn);
   }
 
   // HMC atomic functions
@@ -1430,6 +1483,25 @@ VOID Image(IMG img, VOID *v)
   }
 }
 
+// add PIM routine
+VOID Routine(RTN rtn, VOID *v) {
+  RTN_Open(rtn);
+
+  string name = RTN_Name(rtn);
+  logfile << "name of rtn : " << name << endl;
+
+  if ( name == "pim_func_start" ) {
+    RTN_InsertCall(rtn, IPOINT_BEFORE, (AFUNPTR)RtnPIMStart,
+        IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+        IARG_END);
+  } else if ( name == "pim_func_end" ) {
+    RTN_InsertCall(rtn, IPOINT_AFTER, (AFUNPTR)RtnPIMEnd,
+        IARG_FUNCRET_EXITPOINT_VALUE, 0,
+        IARG_END);
+  }
+  RTN_Close(rtn);
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 /// main function
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1443,6 +1515,8 @@ int main(int argc, char *argv[])
     cerr << KNOB_BASE::StringKnobSummary() << endl;
     return -1;
   }
+
+  logfile.open(Knob_log_file.Value().c_str());
 
   initialize();
   sanity_check();
@@ -1458,7 +1532,7 @@ int main(int argc, char *argv[])
 
   // Added by Lifeng
   IMG_AddInstrumentFunction(Image, 0);
-
+/* RTN_AddInstrumentFunction(Routine, 0); */
   // Instrumentation Granularity:
   // 1. Trace: Counting Basic Blocks instructions to not to
   // overflow from total instruction count for each thread

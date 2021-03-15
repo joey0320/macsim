@@ -82,6 +82,10 @@ struct Inst_info
   bool write_flg;           // 1bit
   uint8_t num_ld;           // 2bit
   uint8_t size;             // 5 bit
+
+  //Added by Joonho
+  bool is_pim;               // 1 bit
+
   // **** dynamic ****
   uint64_t ld_vaddr1;        // 4 bytes
   uint64_t ld_vaddr2;        // 4 bytes
