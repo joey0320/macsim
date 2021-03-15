@@ -56,7 +56,7 @@ def process_options():
 Generate kernel information file
 """
 def get_kernel_information():
-  inc = '' ## TO_CHANGE
+  inc = '-locelot -locelotTrace' ## TO_CHANGE
   cmd = 'nvcc --cubin --ptxas-options=-v -arch %s *.cu -I. %s' % (ver, inc)
   print(cmd)
   p = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
