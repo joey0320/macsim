@@ -470,6 +470,8 @@ void uop_c::init() {
   m_dep_on_hmc_inst = false;
 
   m_translated = false;
+
+  m_is_pim = false;
 }
 
 // initialize a new uop

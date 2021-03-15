@@ -116,6 +116,8 @@ trace_uop_s::trace_uop_s() {
   m_mul_mem_uops = false;
 
   m_hmc_inst = HMC_NONE;
+
+  m_is_pim = false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -209,7 +211,7 @@ void trace_read_c::setup_trace(int core_id, int sim_thread_id) {
 
 /**
  * @param core_id - core id
- * @param trace_info - trace information
+ * @param trace_info - trace information (we are going to cpy into trace_info)
  * @param sim_thread_id - thread id
  * @param inst_read - set true if instruction read successful
  * @see get_uops_from_traces
@@ -251,10 +253,18 @@ bool trace_read_c::read_trace(int core_id, void *trace_info, int sim_thread_id,
         */
       }
 
+      // !!!
+      // this part copies the trace read from the gz file
+      // into trace_info
+      // m_trace_size is defined in trace_read.h
+      // when trace_info is the type of trace_info_cpu_s
+      // m_trace_size = sizeof(trace_info_cpu_s) - sizeof(uint64_t)
+      // now, trace_info has is_pim inside
       memcpy(trace_info,
              &(thread_trace_info
                  ->m_buffer[m_trace_size * thread_trace_info->m_buffer_index]),
              m_trace_size);
+
       thread_trace_info->m_buffer_index =
         (thread_trace_info->m_buffer_index + 1) % k_trace_buffer_size;
 

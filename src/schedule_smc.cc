@@ -97,6 +97,7 @@ schedule_smc_c::schedule_smc_c(int core_id,
       break;
   }
 
+/* m_next_inorder_to_schedule = new int[knob_num_threads]; */
   m_schedule_modulo = *KNOB(KNOB_GPU_SCHEDULE_RATIO) - 1;
   m_schlist_size = MAX_GPU_SCHED_SIZE * knob_num_threads;
   m_schlist_entry = new int[m_schlist_size];
@@ -120,6 +121,7 @@ schedule_smc_c::schedule_smc_c(int core_id,
 
 // schedule_smc_c destructor
 schedule_smc_c::~schedule_smc_c(void) {
+/* delete[] m_next_inorder_to_schedule; */
   delete[] m_schlist_entry;
   delete[] m_schlist_tid;
 }
@@ -388,7 +390,9 @@ bool schedule_smc_c::uop_schedule_smc(int thread_id, int entry,
   return true;
 }
 
-#if 1
+#define ROB_IO_GPU_SCHED
+
+#ifdef ROB_OOO_GPU_SCHED
 // main execution routine
 // In every cycle, schedule uops from rob
 void schedule_smc_c::run_a_cycle(void) {
@@ -432,6 +436,9 @@ void schedule_smc_c::run_a_cycle(void) {
 
       SCHED_FAIL_TYPE sched_fail_reason;
 
+
+      // entry is index of the ROB corresponding to thread_id
+      // look at advance(int alloc_q) && allocate_c::run_a_cycle
       int thread_id = m_schlist_tid[ii];
       int entry = m_schlist_entry[ii];
       bool sfu_inst;
@@ -521,9 +528,133 @@ void schedule_smc_c::run_a_cycle(void) {
     advance(ii);
   }
 }
+/* #elif ROB_IO_GPU_SCHED */
+// in order gpu scheduler
+/* void schedule_smc_c::run_a_cycle(void) { */
+/* // check if the scheduler is running */
+/* if (!is_running()) { */
+/* return; */
+/* } */
+
+/* m_cur_core_cycle = m_simBase->m_core_cycle[m_core_id]; */
+
+/* // GPU : schedule every N cycles (G80:4, Fermi:2) */
+/* m_schedule_modulo = (m_schedule_modulo + 1) % *KNOB(KNOB_GPU_SCHEDULE_RATIO); */
+/* if (m_schedule_modulo) return; */
+
+/* // clear execution port */
+/* m_exec->clear_ports(); */
+
+/* // GPU : recent GPUs have dual warp schedulers. In each schedule cycle, each warp scheduler */
+/* // can schedule instructions from different threads. We enforce threads selected by */
+/* // each warp scheduler should be different. */
+/* int count = 0; */
+/* int num_schedulers = *KNOB(KNOB_NUM_WARP_SCHEDULER); */
+/* int round_count; */
+/* int inst_per_sched = 1; */
+
+/* for (int sched_id = m_next_sched_id, sched_count = 0; */
+/* sched_count < num_schedulers; */
+/* sched_id = (sched_id + 1) % num_schedulers, ++sched_count) { */
+
+/* if (m_dispatch_busy_cycle[sched_id] > m_cur_core_cycle) { */
+/* continue; */
+/* } */
+
+/* round_count = 0; */
+/* for (int ii = m_first_schlist; ii != m_last_schlist; */
+/* ii = (ii + 1) % m_schlist_size) { */
+/* if (!m_num_in_sched || m_first_schlist == m_last_schlist) break; */
+
+/* SCHED_FAIL_TYPE sched_fail_reason; */
+
+/* int thread_id = m_schlist_tid[ii]; */
+/* int entry = m_schlist_entry[ii]; */
+/* bool sfu_inst; */
+
+/* if (thread_id != -1 && (thread_id % num_schedulers) != sched_id) { */
+/* continue; */
+/* } */
+
+/* bool uop_scheduled = false; */
+
+/* if (entry != -1) { */
+/* if (m_processed_threads.find(thread_id) != m_processed_threads.end()) { */
+/* continue; */
+/* } */
+
+/* m_processed_threads[thread_id] = 1; */
+
+/* rob_c *thread_m_rob = m_gpu_rob->get_thread_rob(thread_id); */
+/* uop_c *cur_uop = (*thread_m_rob)[entry]; */
+/* int next_entry = m_gpu_rob->get_next_sched_rob_entry(thread_id); */
+
+/* // we cannot schdule sfu uops that is not ready */
+/* sfu_inst = is_sfu_inst(cur_uop); */
+/* if (sfu_inst && m_sfu_dispatch_busy_cycle > m_cur_core_cycle) { */
+/* continue; */
+/* } */
+
+/* // we cannot schedule uops that is not */
+/* // in front of each thread's rob */
+/* if (entry != next_entry) { */
+/* continue; */
+/* } */
+
+/* assert(entry == next_entry); */
+
+/* if (uop_schedule_smc(thread_id, entry, &sched_fail_reason)) { */
+/* STAT_CORE_EVENT(m_core_id, SCHED_FAILED_REASON_SUCCESS); */
+
+/* m_schlist_entry[ii] = -1; */
+/* m_schlist_tid[ii] = -1; */
+/* if (ii == m_first_schlist) { */
+/* m_first_schlist = (m_first_schlist + 1) % m_schlist_size; */
+/* } */
+
+/* m_gpu_rob->inc_next_sched_rob_entry(thread_id); */
+
+/* uop_scheduled = true; */
+/* ++count; */
+
+/* if (sfu_inst) { */
+/* m_sfu_dispatch_busy_cycle = */
+/* m_cur_core_cycle + m_dispatch_latency[cur_uop->m_uop_type]; */
+/* } else { */
+/* m_dispatch_busy_cycle[sched_id] = */
+/* m_cur_core_cycle + m_dispatch_latency[cur_uop->m_uop_type]; */
+/* } */
+
+/* ++round_count; */
+
+/* if (round_count == inst_per_sched) { */
+/* break; */
+/* } */
+/* } else { */
+/* STAT_CORE_EVENT(m_core_id, SCHED_FAILED_REASON_SUCCESS + */
+/* MIN2(sched_fail_reason, 6)); */
+/* } */
+/* } else if (ii == m_first_schlist) { */
+/* m_first_schlist = (m_first_schlist + 1) % m_schlist_size; */
+/* } */
+/* } */
+/* } */
+
+/* m_next_sched_id = (m_next_sched_id + 1) % num_schedulers; */
+/* // no uop is scheduled in this cycle */
+/* if (count == 0) { */
+/* STAT_CORE_EVENT(m_core_id, NUM_NO_SCHED_CYCLE); */
+/* STAT_EVENT(AVG_CORE_IDLE_CYCLE); */
+/* } */
+
+/* m_processed_threads.clear(); */
+
+/* // advance entries from alloc queue to schedule queue */
+/* for (int ii = 0; ii < max_ALLOCQ; ++ii) { */
+/* advance(ii); */
+/* } */
+/* } */
 #else
-// main execution routine
-// In every cycle, schedule uops from rob
 void schedule_smc_c::run_a_cycle(void) {
   // check if the scheduler is running
   if (!is_running()) {
@@ -543,52 +674,114 @@ void schedule_smc_c::run_a_cycle(void) {
   // can schedule instructions from different threads. We enforce threads selected by
   // each warp scheduler should be different.
   int count = 0;
-  for (int ii = m_first_schlist; ii != m_last_schlist;
-       ii = (ii + 1) % m_schlist_size) {
-    // -------------------------------------
-    // Schedule stops when
-    // 1) no uops in the scheduler (m_num_in_sched and first == last)
-    // 2) # warp scheduler
-    // 3) FIXME add width condition
-    // -------------------------------------
-    if (!m_num_in_sched || m_first_schlist == m_last_schlist ||
-        count == *KNOB(KNOB_NUM_WARP_SCHEDULER))
-      break;
+  int num_schedulers = *KNOB(KNOB_NUM_WARP_SCHEDULER);
+  int round_count;
+  int inst_per_sched = 1;
+  for (int sched_id = m_next_sched_id, sched_count = 0;
+       sched_count < num_schedulers;
+       sched_id = (sched_id + 1) % num_schedulers, ++sched_count) {
+    if (m_dispatch_busy_cycle[sched_id] > m_cur_core_cycle) {
+      continue;
+    }
+    round_count = 0;
+    for (int ii = m_first_schlist; ii != m_last_schlist;
+         ii = (ii + 1) % m_schlist_size) {
+      // -------------------------------------
+      // Schedule stops when
+      // 1) no uops in the scheduler (m_num_in_sched and first == last)
+      // 2) # warp scheduler
+      // 3) FIXME add width condition
+      // -------------------------------------
+      if (!m_num_in_sched || m_first_schlist == m_last_schlist) break;
 
-    SCHED_FAIL_TYPE sched_fail_reason;
+      SCHED_FAIL_TYPE sched_fail_reason;
 
-    int thread_id = m_schlist_tid[ii];
-    int entry = m_schlist_entry[ii];
 
-    bool uop_scheduled = false;
+      // entry is index of the ROB corresponding to thread_id
+      // look at advance(int alloc_q) && allocate_c::run_a_cycle
+      int thread_id = m_schlist_tid[ii];
+      int entry = m_schlist_entry[ii];
+      bool sfu_inst;
 
-    if (entry != -1) {
-      // schedule a uop from a thread
-      if (uop_schedule_smc(thread_id, entry, &sched_fail_reason)) {
-        STAT_CORE_EVENT(m_core_id, SCHED_FAILED_REASON_SUCCESS);
+      if (thread_id != -1 && (thread_id % num_schedulers) != sched_id) {
+        continue;
+      }
 
-        m_schlist_entry[ii] = -1;
-        m_schlist_tid[ii] = -1;
-        if (ii == m_first_schlist) {
-          m_first_schlist = (m_first_schlist + 1) % m_schlist_size;
+      bool uop_scheduled = false;
+
+      if (entry != -1) {
+        if (m_processed_threads.find(thread_id) != m_processed_threads.end()) {
+          continue;
         }
 
-        uop_scheduled = true;
-        ++count;
-      } else {
-        STAT_CORE_EVENT(
-          m_core_id, SCHED_FAILED_REASON_SUCCESS + MIN2(sched_fail_reason, 5));
+        m_processed_threads[thread_id] = 1;
+
+        {
+          rob_c *thread_m_rob = m_gpu_rob->get_thread_rob(thread_id);
+          uop_c *cur_uop = (*thread_m_rob)[entry];
+
+          sfu_inst = is_sfu_inst(cur_uop);
+          if (sfu_inst && m_sfu_dispatch_busy_cycle > m_cur_core_cycle) {
+            continue;
+          }
+        }
+
+        // cout << m_cur_core_cycle << " trying " << setw(3) << thread_id << "\n";
+
+        // schedule a uop from a thread
+        if (uop_schedule_smc(thread_id, entry, &sched_fail_reason)) {
+          STAT_CORE_EVENT(m_core_id, SCHED_FAILED_REASON_SUCCESS);
+
+          m_schlist_entry[ii] = -1;
+          m_schlist_tid[ii] = -1;
+          if (ii == m_first_schlist) {
+            m_first_schlist = (m_first_schlist + 1) % m_schlist_size;
+          }
+
+          uop_scheduled = true;
+          ++count;
+
+          {
+            rob_c *thread_m_rob = m_gpu_rob->get_thread_rob(thread_id);
+            uop_c *cur_uop = (*thread_m_rob)[entry];
+            /*
+            cout << m_cur_core_cycle << " "
+                 << sched_id << " "
+                 << thread_id << " "
+                 << sfu_inst << " "
+                 << m_dispatch_latency[cur_uop->m_uop_type] << "\n";
+            */
+
+            if (sfu_inst) {
+              m_sfu_dispatch_busy_cycle =
+                m_cur_core_cycle + m_dispatch_latency[cur_uop->m_uop_type];
+            } else {
+              m_dispatch_busy_cycle[sched_id] =
+                m_cur_core_cycle + m_dispatch_latency[cur_uop->m_uop_type];
+            }
+          }
+          ++round_count;
+          if (round_count == inst_per_sched) {
+            break;
+          }
+        } else {
+          STAT_CORE_EVENT(m_core_id, SCHED_FAILED_REASON_SUCCESS +
+                                       MIN2(sched_fail_reason, 6));
+        }
+      } else if (ii == m_first_schlist) {
+        m_first_schlist = (m_first_schlist + 1) % m_schlist_size;
       }
-    } else if (ii == m_first_schlist) {
-      m_first_schlist = (m_first_schlist + 1) % m_schlist_size;
     }
   }
 
+  m_next_sched_id = (m_next_sched_id + 1) % num_schedulers;
   // no uop is scheduled in this cycle
   if (count == 0) {
     STAT_CORE_EVENT(m_core_id, NUM_NO_SCHED_CYCLE);
     STAT_EVENT(AVG_CORE_IDLE_CYCLE);
   }
+
+  m_processed_threads.clear();
 
   // advance entries from alloc queue to schedule queue
   for (int ii = 0; ii < max_ALLOCQ; ++ii) {
@@ -606,3 +799,4 @@ bool schedule_smc_c::is_sfu_inst(uop_c *uop) {
   }
   return false;
 }
+
