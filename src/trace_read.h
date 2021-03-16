@@ -89,7 +89,8 @@ typedef struct trace_info_cpu_s {
   uint8_t m_size; /**< instruction size */
 
   // Added by Joonho
-  bool m_is_pim;
+  bool m_pim_region;
+  bool m_avx_type;
   
   // dynamic information
   uint64_t m_ld_vaddr1; /**< load address 1 */
@@ -276,7 +277,8 @@ typedef struct trace_uop_s {
 
   // PIM simulation
   // changed by Joonho
-  bool m_is_pim;
+  bool m_pim_region;
+  bool m_avx_type;
 } trace_uop_s;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

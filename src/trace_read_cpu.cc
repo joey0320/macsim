@@ -299,7 +299,8 @@ void cpu_decoder_c::convert_dyn_uop(inst_info_s *info, void *trace_info,
   trace_uop->m_npc = trace_uop->m_addr;
 
   // Add pim marking
-  trace_uop->m_is_pim = pi->m_is_pim;
+  trace_uop->m_pim_region = pi->m_pim_region;
+  trace_uop->m_avx_type = pi->m_avx_type;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -765,7 +766,8 @@ inst_info_s *cpu_decoder_c::convert_pinuop_to_t_uop(void *trace_info,
       trace_uop[ii]->m_opcode = pi->m_opcode;
 
       // Added by Joonho
-      trace_uop[ii]->m_is_pim = pi->m_is_pim;
+      trace_uop[ii]->m_pim_region = pi->m_pim_region;
+      trace_uop[ii]->m_avx_type = pi->m_avx_type;
     }
 
     // set end of macro flag to the last uop
@@ -1128,7 +1130,8 @@ bool cpu_decoder_c::get_uops_from_traces(int core_id, uop_c *uop,
   uop->m_active_mask = trace_uop->m_active_mask;
 
   /// TODO
-  uop->m_is_pim = trace_uop->m_is_pim; 
+  uop->m_pim_region = trace_uop->m_pim_region; 
+  uop->m_avx_type = trace_uop->m_avx_type;
 
   // pass over hmc inst info
   uop->m_hmc_inst = trace_uop->m_hmc_inst;
