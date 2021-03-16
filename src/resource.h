@@ -41,6 +41,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "assert_macros.h"
 #include "utils.h"
+#include <assert.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// \brief Resource Structure class
@@ -171,6 +172,64 @@ public:
   void dealloc_fp_reg() {
     ++m_num_fp_regs;
   }
+  
+  /////////////////////////////////
+  // pim resources
+  /////////////////////////////////
+  int get_num_pim_int_regs() {
+    return m_num_pim_int_regs;
+  }
+
+  int get_num_pim_fp_regs() {
+    return m_num_pim_fp_regs;
+  }
+
+  void alloc_pim_int_reg() {
+    ASSERT(m_num_pim_int_regs > 0);
+    --m_num_pim_int_regs;
+  }
+
+  void alloc_pim_fp_reg() {
+    ASSERT(m_num_pim_fp_regs > 0);
+    --m_num_pim_fp_regs;
+  }
+
+  void dealloc_pim_int_reg() {
+    ++m_num_pim_int_regs;
+  }
+
+  void dealloc_pim_fp_reg() {
+    ++m_num_pim_fp_regs;
+  }
+
+  void alloc_pim_sb() {
+    ASSERT(m_num_pim_sb > 0);
+    m_num_pim_sb--;
+  }
+
+  void dealloc_pim_sb() {
+    ASSERT(m_num_pim_sb < m_max_pim_sb_cnt);
+    m_num_pim_sb++;
+  }
+
+  int get_num_pim_sb() {
+    return m_num_pim_sb;
+  }
+
+  void alloc_pim_lb() {
+    assert(m_num_pim_lb > 0);
+    m_num_pim_lb--;
+  }
+
+  void dealloc_pim_lb() {
+    assert(m_num_pim_lb < m_max_pim_lb_cnt);
+    m_num_pim_lb++;
+  }
+
+
+  int get_num_pim_lb() {
+    return m_num_pim_lb;
+  }
 
   /**
    * reset the hardware resource counter values
@@ -187,6 +246,18 @@ private:
   int m_num_int_regs; /**< number of available int register */
   int m_max_fp_regs; /**< max fp register */
   int m_num_fp_regs; /**< number of available fp register */
+  
+  // Added by Joonho
+  int m_num_pim_fp_regs;
+  int m_max_pim_fp_regs;
+  int m_num_pim_int_regs;
+  int m_max_pim_int_regs;
+
+  int m_max_pim_sb_cnt; /**< max store buffer size */
+  int m_num_pim_sb; /**< number of available store buffer */
+  int m_max_pim_lb_cnt; /**< max load buffer size */
+  int m_num_pim_lb; /**< number of available load buffer */
+
 
   Unit_Type m_unit_type; /**< core type */
   macsim_c* m_simBase; /**< macsim_c base class for simulation globals */

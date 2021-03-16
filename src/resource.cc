@@ -63,6 +63,17 @@ resource_c::resource_c(Unit_Type type, macsim_c* simBase) {
 
   m_max_fp_regs = *m_simBase->m_knobs->KNOB_FP_REGFILE_SIZE;
   m_num_fp_regs = *m_simBase->m_knobs->KNOB_FP_REGFILE_SIZE;
+
+  // pim int & fp registers
+  m_max_pim_int_regs = *m_simBase->m_knobs->KNOB_PIM_INT_REGFILE_SIZE;
+  m_num_pim_int_regs = *m_simBase->m_knobs->KNOB_PIM_INT_REGFILE_SIZE;
+  m_max_pim_fp_regs = *m_simBase->m_knobs->KNOB_PIM_FP_REGFILE_SIZE;
+  m_num_pim_fp_regs = *m_simBase->m_knobs->KNOB_PIM_FP_REGFILE_SIZE;
+
+  m_max_pim_lb_cnt = *m_simBase->m_knobs->KNOB_PIM_LOAD_BUF_SIZE;
+  m_num_pim_lb = *m_simBase->m_knobs->KNOB_PIM_LOAD_BUF_SIZE;
+  m_max_pim_sb_cnt = *m_simBase->m_knobs->KNOB_PIM_STORE_BUF_SIZE;
+  m_num_pim_sb = *m_simBase->m_knobs->KNOB_PIM_STORE_BUF_SIZE;
 }
 
 // resource_ clear :: reset
