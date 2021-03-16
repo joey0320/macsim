@@ -471,7 +471,12 @@ void uop_c::init() {
 
   m_translated = false;
 
-  m_is_pim = false;
+  m_pim_region = false;
+  m_avx_type = false;
+  m_req_pim_int_reg = false;
+  m_req_pim_fp_reg = false;
+  m_req_pim_lb = false;
+  m_req_pim_sb = false;
 }
 
 // initialize a new uop

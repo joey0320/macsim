@@ -52,6 +52,8 @@ typedef enum Iaq_Type_enum {
   mem_ALLOCQ,
   fp_ALLOCQ,
   simd_ALLOCQ,
+  pim_mem_ALLOCQ,
+  pim_fp_ALLOCQ,
   max_ALLOCQ
 } ALLOCQ_Type;
 
@@ -688,7 +690,12 @@ public:
 
   // pim info
   // changed by Joonho
-  bool m_is_pim;
+  bool m_pim_region;
+  bool m_avx_type;
+  bool m_req_pim_int_reg; /**< need integer register */
+  bool m_req_pim_fp_reg; /**< need fp register */
+  bool m_req_pim_lb; /**< need integer register */
+  bool m_req_pim_sb; /**< need fp register */
 
 private:
   macsim_c *m_simBase; /**< macsim_c base class for simulation globals */
