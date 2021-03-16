@@ -200,11 +200,11 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
   }
 
   // Return if sources are not ready
-  if (!bogus && !(cur_uop->m_srcs_rdy) && cur_uop->m_last_dep_exec &&
-      (m_cur_core_cycle < *(cur_uop->m_last_dep_exec))) {
-    *sched_fail_reason = SCHED_FAIL_OPERANDS_NOT_READY;
-    return false;
-  }
+/* if (!bogus && !(cur_uop->m_srcs_rdy) && cur_uop->m_last_dep_exec && */
+/* (m_cur_core_cycle < *(cur_uop->m_last_dep_exec))) { */
+/* *sched_fail_reason = SCHED_FAIL_OPERANDS_NOT_READY; */
+/* return false; */
+/* } */
 
   if (!bogus) {
     // check whether source registers are ready
@@ -303,8 +303,16 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
       ASSERT(m_num_per_sched[simd_ALLOCQ] > 0);
       --m_num_per_sched[simd_ALLOCQ];
       break;
+    case pim_mem_ALLOCQ:
+      ASSERT(m_num_per_sched[pim_mem_ALLOCQ] > 0);
+      --m_num_per_sched[pim_mem_ALLOCQ];
+      break;
+    case pim_fp_ALLOCQ:
+      ASSERT(m_num_per_sched[pim_fp_ALLOCQ] > 0);
+      --m_num_per_sched[pim_fp_ALLOCQ];
+      break;
     default:
-      printf("unknown allocq\n");
+      printf("unknown allocq : %d\n", q_num);
       exit(EXIT_FAILURE);
   }
 
@@ -313,12 +321,17 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
              "inst_num:%lld entry:%d allocq:%d "
              "m_num_in_sched:%d m_num_per_sched[general]:%d "
              "m_num_per_sched[mem]:%d m_num_per_sched[fp]:%d "
-             "m_num_per_sched[simd]:%d done_cycle:%lld\n",
+             "m_num_per_sched[simd]:%d "
+             "m_num_per_sched[pim_mem]:%d m_num_per_sched[pim_fp]:%d "
+             "done_cycle:%lld\n",
              m_cur_core_cycle, m_core_id, cur_uop->m_thread_id,
              cur_uop->m_uop_num, cur_uop->m_inst_num, entry,
              cur_uop->m_allocq_num, m_num_in_sched, m_num_per_sched[gen_ALLOCQ],
              m_num_per_sched[mem_ALLOCQ], m_num_per_sched[fp_ALLOCQ],
-             m_num_per_sched[simd_ALLOCQ], cur_uop->m_done_cycle);
+             m_num_per_sched[simd_ALLOCQ], 
+             m_num_per_sched[pim_mem_ALLOCQ], 
+             m_num_per_sched[pim_fp_ALLOCQ], 
+             cur_uop->m_done_cycle);
 
   return true;
 }
@@ -330,7 +343,6 @@ void schedule_c::advance(int q_index) {
 
   // Iterate until alloc queue has ready members
   while (m_alloc_q[q_index]->ready()) {
-    // this prevents scheduler overwritten
     if ((m_last_schlist_ptr + 1) % MAX_SCHED_SIZE == m_first_schlist_ptr) break;
 
     int entry = (int)m_alloc_q[q_index]->peek(0);

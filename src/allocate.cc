@@ -123,18 +123,35 @@ void allocate_c::run_a_cycle(void) {
     int req_simd_reg = 0;  // require simd register
     int q_type = *m_simBase->m_knobs->KNOB_GEN_ALLOCQ_INDEX;
 
-    if (uop->m_mem_type == MEM_LD)  // load queue
-      req_lb = 1;
-    else if (uop->m_mem_type == MEM_ST)  // store queue
-      req_sb = 1;
-    else if (uop->m_uop_type == UOP_IADD ||  // integer register
-             uop->m_uop_type == UOP_IMUL || uop->m_uop_type == UOP_ICMP)
-      req_int_reg = 1;
-    else if (uop->m_uop_type == UOP_FCVT ||
-             uop->m_uop_type == UOP_FADD)  // fp register
-      req_fp_reg = 1;
-    else if (uop->m_uop_type == UOP_SIMD)  // simd register
+    // pim resources
+    int req_pim_lb = 0;
+    int req_pim_sb = 0;
+    int req_pim_int_reg = 0;  // require integer register
+    int req_pim_fp_reg = 0;  // require fp register
+
+    if (uop->m_mem_type == MEM_LD) {             
+      if (uop->m_pim_region && uop->m_avx_type)
+        req_pim_lb = 1;                          // load queue for pim
+      else
+        req_lb = 1;                              // load queue
+    } else if (uop->m_mem_type == MEM_ST) {      
+      if (uop->m_pim_region && uop->m_avx_type)
+        req_pim_sb = 1;                          // store queue for pim
+      else
+        req_sb = 1;                              // store queue
+    } else if (uop->m_uop_type == UOP_IADD ||  
+             uop->m_uop_type == UOP_IMUL || 
+             uop->m_uop_type == UOP_ICMP) {      // integer register
+        req_int_reg = 1;
+    } else if (uop->m_uop_type == UOP_FCVT ||
+             uop->m_uop_type == UOP_FADD) { 
+      if (uop->m_pim_region && uop->m_avx_type)  //fp register for pim
+        req_pim_fp_reg = 1;
+      else                                       // fp register
+        req_fp_reg = 1;
+    } else if (uop->m_uop_type == UOP_SIMD) {    // simd register
       req_simd_reg = 1;
+    }
 
     // single allocation queue
     if (m_num_queues == 1) {
@@ -148,6 +165,10 @@ void allocate_c::run_a_cycle(void) {
         q_type = *m_simBase->m_knobs->KNOB_SIMD_ALLOCQ_INDEX;
       else if (req_sb || req_lb)
         q_type = *m_simBase->m_knobs->KNOB_MEM_ALLOCQ_INDEX;
+      else if (req_pim_sb || req_pim_lb)
+        q_type = *m_simBase->m_knobs->KNOB_PIM_MEM_ALLOCQ_INDEX;
+      else if (req_pim_fp_reg)
+        q_type = *m_simBase->m_knobs->KNOB_PIM_FLOAT_ALLOCQ_INDEX;
       else
         q_type = *m_simBase->m_knobs->KNOB_GEN_ALLOCQ_INDEX;
     }
@@ -158,13 +179,18 @@ void allocate_c::run_a_cycle(void) {
     if (m_rob->space() < req_rob || m_resource->get_num_sb() < req_sb ||
         m_resource->get_num_lb() < req_lb || alloc_q->space() < 1 ||
         m_resource->get_num_int_regs() < req_int_reg ||
-        m_resource->get_num_fp_regs() < req_fp_reg) {
+        m_resource->get_num_fp_regs() < req_fp_reg ||
+        m_resource->get_num_pim_int_regs() < req_pim_int_reg ||
+        m_resource->get_num_pim_fp_regs() < req_pim_fp_reg ||
+        m_resource->get_num_pim_lb() < req_pim_lb ||
+        m_resource->get_num_pim_sb() < req_pim_sb) {
       DEBUG_CORE(m_core_id,
                  "not enough physical resources: rob_space:%d num_sb:%d "
-                 "num_lb:%d alloc_q:%d int_reg:%d fp_reg:%d \n",
+                 "num_lb:%d alloc_q:%d int_reg:%d fp_reg:%d pim_int_reg:%d pim_fp_reg:%d \n",
                  m_rob->space(), m_resource->get_num_sb(),
                  m_resource->get_num_lb(), alloc_q->space(),
-                 m_resource->get_num_int_regs(), m_resource->get_num_fp_regs());
+                 m_resource->get_num_int_regs(), m_resource->get_num_fp_regs(),
+                 m_resource->get_num_pim_int_regs(), m_resource->get_num_pim_fp_regs());
       break;
     }
 
@@ -184,8 +210,17 @@ void allocate_c::run_a_cycle(void) {
     } else if (req_fp_reg) {
       m_resource->alloc_fp_reg();
       uop->m_req_fp_reg = true;
+    } else if (req_pim_fp_reg) {
+      m_resource->alloc_pim_fp_reg();
+      uop->m_req_pim_fp_reg = true;
+    } else if (req_pim_lb) {
+      m_resource->alloc_pim_lb();
+      uop->m_req_pim_lb = true;
+    } else if (req_pim_sb) {
+      m_resource->alloc_pim_sb();
+      uop->m_req_pim_sb = true;
     }
-
+    
     // -------------------------------------
     // enqueue an entry in allocate queue
     // -------------------------------------
@@ -208,7 +243,11 @@ void allocate_c::run_a_cycle(void) {
             ? mem_ALLOCQ
             : (q_type == *m_simBase->m_knobs->KNOB_FLOAT_ALLOCQ_INDEX)
                 ? fp_ALLOCQ
-                : simd_ALLOCQ;
+              : (q_type == *m_simBase->m_knobs->KNOB_SIMD_ALLOCQ_INDEX)
+                  ? simd_ALLOCQ
+                : (q_type == *m_simBase->m_knobs->KNOB_PIM_MEM_ALLOCQ_INDEX)
+                    ? pim_mem_ALLOCQ
+                    : pim_fp_ALLOCQ;
     m_rob->push(uop);
 
     POWER_CORE_EVENT(m_core_id, POWER_REORDER_BUF_W);

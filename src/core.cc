@@ -195,6 +195,9 @@ core_c::core_c(int c_id, macsim_c* simBase, Unit_Type type) {
   q_iaq_size[mem_ALLOCQ] = miaq_size;
   q_iaq_size[fp_ALLOCQ] = fq_size;
   q_iaq_size[simd_ALLOCQ] = siaq_size;
+  // TODO : add knobs
+  q_iaq_size[pim_mem_ALLOCQ] = miaq_size;
+  q_iaq_size[pim_fp_ALLOCQ] = fq_size;
 
   sstr.clear();
   if (m_core_type == "ptx" || m_core_type == "igpu") {
@@ -595,6 +598,8 @@ void core_c::check_forward_progress() {
 
     m_simBase->m_network->print();
 
+    assert(m_core_cycle_count - m_last_forward_progress <= 
+        *KNOB(KNOB_FORWARD_PROGRESS_LIMIT)); 
     ASSERTM(m_core_cycle_count - m_last_forward_progress <=
               *KNOB(KNOB_FORWARD_PROGRESS_LIMIT),
             "core_id:%d core_cycle_count:%llu (%llu) "

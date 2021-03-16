@@ -358,6 +358,15 @@ void retire_c::run_a_cycle() {
     if (cur_uop->m_req_fp_reg) {
       m_resource->dealloc_fp_reg();
     }
+    if (cur_uop->m_req_pim_lb) {
+      m_resource->dealloc_pim_lb();
+    }
+    if (cur_uop->m_req_pim_sb) {
+      m_resource->dealloc_pim_sb();
+    }
+    if (cur_uop->m_req_pim_fp_reg) {
+      m_resource->dealloc_pim_fp_reg();
+    }
 
     if (KNOB(KNOB_USE_WB)->getValue()) {
       // free uop resources only for uops not in write buffer
