@@ -117,6 +117,9 @@ dram_scheduling_policy FRFCFS
 # ETC
 bug_detector_enable 1
 
+# PIM
+pim_int_regfile_size 32
+pim_fp_regfile_size 32
 
 # DEBUG
 debug_core_id 0
