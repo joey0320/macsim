@@ -84,7 +84,8 @@ struct Inst_info
   uint8_t size;             // 5 bit
 
   //Added by Joonho
-  bool is_pim;               // 1 bit
+  bool pim_region;          // 1 bit
+  bool avx_type;            // 1 bit
 
   // **** dynamic ****
   uint64_t ld_vaddr1;        // 4 bytes

@@ -1,0 +1,30 @@
+/home/joonho/bench/macsim/macsim-fork/tools/x86_trace_generator/x86-test/sort_and_add/main image name
+/lib64/ld-linux-x86-64.so.2 image name
+[vdso] image name
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+/lib64/libstdc++.so.6 image name
+/lib64/libm.so.6 image name
+/lib64/libgcc_s.so.1 image name
+/lib64/libc.so.6 image name
+RecordMainBegin called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+RecordFree called
+freeing unallocated memory at addrss : 0
+RecordFree called
+freeing unallocated memory at addrss : 0
+RecordMainEnd called
+RecordFree called
+memory at e33080allocated but not frred.

@@ -786,7 +786,7 @@ void instrument(INS ins)
     info->opcode = (uint8_t)(INS_Category(ins));
   }
 
-#if 0
+#if 1
   // ----------------------------------------
   // SSE, AVX (Vector) instruction
   // ----------------------------------------
@@ -796,7 +796,7 @@ void instrument(INS ins)
       INS_Category(ins) == XED_CATEGORY_X87_ALU || 
       INS_Category(ins) == XED_CATEGORY_MMX ||
       INS_Category(ins) == XED_CATEGORY_SSE) {
-    info->is_fp = 1;
+    info->avx_type = true;
   }
 #endif
 
@@ -885,7 +885,7 @@ void instrument(INS ins)
 
   // added by Joonho
   if (Knob_enable_pim.Value() && record_pim[tid]) {
-    info->is_pim = true;
+    info->pim_region = true;
   }
 
   // ----------------------------------------
