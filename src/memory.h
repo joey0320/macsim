@@ -47,6 +47,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #define MemType_Prefetch(x) (x >= MEM_SWPREF_NTA && x <= MEM_SWPREF_T2)
 #define MRT_Prefetch(x) (x >= MRT_SW_DPRF && x <= MRT_SW_DPRF_T2)
 
+// comment this to disable LLC hashing
+#define LLC_HASHING
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 enum COHERENCE_STATE {
@@ -321,6 +324,14 @@ private:
 
   // clock
   Counter m_cycle; /**< clock cycle */
+
+/* // Added by Joonho */
+/* // Pim bank access pattern */
+/* bool m_pim_cache; */
+/* int m_cur_pim_bank; */
+/* int m_pim_line_max; */
+/* int m_pim_line_cnt; */
+/* bool *m_pim_full; */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

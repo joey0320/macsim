@@ -55,6 +55,17 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "map.h"
 #include "bp.h"
 
+/////////////////////////////////////////////////////////////////////////////////////////////// constant definitions
+
+const int hash_idx0[10] = {6, 12, 17, 18, 22, 24, 27, 29, 30, 32};
+const int hash_idx1[14] = {7, 12, 13, 17, 19, 22, 23, 24, 25, 27, 28, 31, 32, 33};
+const int hash_idx2[13] = {8, 13, 14, 18, 20, 23, 24, 25, 26, 28, 32, 33, 34};
+const int hash_idx3[12] = {9, 14, 15, 19, 21, 24, 25, 26, 27, 29, 33, 34};
+const int hash_idx4[11] = {10, 15, 16, 20, 22, 25, 26, 27, 28, 30, 34};
+const int hash_idx5[10] = {11, 16, 17, 21, 23, 26, 27, 28, 29, 31};
+const int hash_idx6[15] = {12, 13, 14, 15, 16, 18, 19, 20, 21, 24, 25, 26, 28, 30, 31};
+
+const int hash_idx_sz[7] = {10, 14, 13, 12, 11, 10, 15};
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // macro definitions
@@ -81,6 +92,14 @@ POSSIBILITY OF SUCH DAMAGE.
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #define prefetch(x) __builtin_prefetch(x)
 
+#define NTH_BIT(x, n) x&(1<<n)?1:0
+
+#define FIRST_HASH(x, id, sz)              \
+  uns64 ret = 0;                     \
+  for (int i = 0; i < sz; i++)    \
+    ret = ret ^ NTH_BIT(x, id[i]);   \
+  return ret;                     \
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // function declarations in utils.h. Please refer to utils.cc for the description
@@ -96,6 +115,17 @@ uns log2_int(uns n);
 
 FILE* file_tag_fopen(std::string, char const* const, macsim_c*);
 
+
+// for llc hash function definition
+inline uns64 llc_first_hash0(Addr addr) { FIRST_HASH(addr, hash_idx0, hash_idx_sz[0]); }
+inline uns64 llc_first_hash1(Addr addr) { FIRST_HASH(addr, hash_idx1, hash_idx_sz[1]); }
+inline uns64 llc_first_hash2(Addr addr) { FIRST_HASH(addr, hash_idx2, hash_idx_sz[2]); }
+inline uns64 llc_first_hash3(Addr addr) { FIRST_HASH(addr, hash_idx3, hash_idx_sz[3]); }
+inline uns64 llc_first_hash4(Addr addr) { FIRST_HASH(addr, hash_idx4, hash_idx_sz[4]); }
+inline uns64 llc_first_hash5(Addr addr) { FIRST_HASH(addr, hash_idx5, hash_idx_sz[5]); }
+inline uns64 llc_first_hash6(Addr addr) { FIRST_HASH(addr, hash_idx6, hash_idx_sz[6]); }
+
+uns64 llc_hash(Addr addr);
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 using namespace std;

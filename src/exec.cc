@@ -328,7 +328,11 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
 #ifdef USING_SST
               uop_latency = access_data_cache(uop);
 #else  // USING_SST
-            uop_latency = MEMORY->access(uop);
+            if (uop->m_pim_region && uop->m_avx_type) { // ld to LLC
+              uop_latency = MEMORY->access(uop);
+            } else {
+              uop_latency = MEMORY->access(uop);
+            }
 #endif  // USING_SST
 
 #if PORT_FIXME
@@ -444,7 +448,11 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
 #ifdef USING_SST
                 latency = access_data_cache(uop->m_child_uops[next_set_bit]);
 #else  // USING_SST
-              latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
+              if (uop->m_pim_region && uop->m_avx_type) { // ld to LLC
+                latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
+              } else {
+                latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
+              }
 #endif  // USING_SST
 
 #if PORT_FIXME
@@ -492,7 +500,7 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
                          uop->m_inst_num,
                          uop->m_child_uops[next_set_bit]->m_uop_num);
             }
-          } else {
+          } else { // memory access fail
             DEBUG_CORE(m_core_id,
                        "m_core_id:%d thread_id:%d uop_num:%llu "
                        "child_uop_num:%llu fail\n",
@@ -645,6 +653,7 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
     }
   }
   POWER_CORE_EVENT(m_core_id, POWER_EXEC_BYPASS);
+
 
   // set scheduling cycle
   uop->m_sched_cycle = m_cur_core_cycle;

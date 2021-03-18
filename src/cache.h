@@ -77,6 +77,9 @@ public:
   bool m_skip;  //!< skip LLC
   friend class cache_c;
 
+  // Added by Joonho
+/* bool m_pim; //cache entry is for pim op */
+
   cache_entry_c();
 };
 
@@ -156,6 +159,14 @@ public:
    */
   void find_tag_and_set(Addr addr, Addr *tag, int *set);
 
+
+  /**
+   * modify set finding for pim addr
+   * for now, just set lower bits of set to 0
+   * so all pim goes to bank 0
+   */
+/* void find_tag_and_set(Addr addr, Addr *tag, int *set, bool is_pim); */
+
   /**
    *  \brief Cache look-up based on address.
    *  \param addr - Address
@@ -165,6 +176,8 @@ public:
    *  \return void* - Pointer to the cache line data (if found)
    */
   void *access_cache(Addr addr, Addr *line_addr, bool update_repl, int appl_id);
+
+/* void *access_cache(Addr addr, Addr *line_addr, bool update_repl, int appl_id, bool is_pim); */
 
   /**
    * Update a cache line on access

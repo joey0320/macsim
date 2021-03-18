@@ -298,6 +298,10 @@ dcu_c::dcu_c(int id, Unit_Type type, int level, memory_c* mem, int noc_id,
 
   m_cache = NULL;
   m_port = NULL;
+
+/* m_pim_cache = false; */
+/* m_cur_pim_bank = 0; */
+/* m_pim_line_max = m_cache */
 }
 
 // dcu_c destructor.
@@ -585,6 +589,7 @@ int dcu_c::access(uop_c* uop) {
     } else {
       req_size = m_line_size;
       req_addr = line_addr;
+
     }
 
     // FIXME (jaekyu, 10-26-2011)
@@ -1972,8 +1977,15 @@ void memory_c::set_cache_id(mem_req_s* req) {
   req->m_cache_id[MEM_L1] = req->m_core_id;
   req->m_cache_id[MEM_L2] = req->m_core_id;
   req->m_cache_id[MEM_L3] = BANK(req->m_addr, m_num_l3, m_l3_interleave_factor);
+  
+  // TODO change here : for LLC hashing
+#ifdef LLC_HASHING
+  req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
+#else
   req->m_cache_id[MEM_LLC] =
-    BANK(req->m_addr, m_num_llc, m_llc_interleave_factor);
+  BANK(req->m_addr, m_num_llc, m_llc_interleave_factor);
+#endif
+
   req->m_cache_id[MEM_MC] =
     BANK(req->m_addr, m_num_mc, *KNOB(KNOB_DRAM_INTERLEAVE_FACTOR));
 }

@@ -183,6 +183,18 @@ void cache_c::find_tag_and_set(Addr addr, Addr *tag, int *set) {
   }
 }
 
+// TODO : modify pim cache block hashing scheme
+/* void cache_c::find_tag_and_set(Addr addr, Addr *tag, int *set, bool is_pim) { */
+/* if (!is_pim) { */
+/* find_tag_and_set(addr, tag, set); */
+/* } else { */
+/* // TODO : add tiles */
+/* assert(m_num_tiles == 1); */
+/* *tag = addr >> m_shift_bits & m_tag_mask; */
+/* *set = (addr >> m_shift_bits & m_set_mask) & (-N_BIT_MASK(log2_int(m_bank_num))); // 2s comp */
+/* } */
+/* } */
+
 // access the cache
 void *cache_c::access_cache(Addr addr, Addr *line_addr, bool update_repl,
                             int appl_id) {
@@ -224,6 +236,46 @@ void *cache_c::access_cache(Addr addr, Addr *line_addr, bool update_repl,
 
   return NULL;
 }
+
+/* void *cache_c::access_cache(Addr addr, Addr *line_addr, bool update_repl, int appl_id, bool is_pim) { */
+/* // Check if cache by pass is set. If so return NULL. */
+/* if (m_cache_by_pass) return NULL; */
+
+/* Addr tag; */
+/* int set; */
+
+/* // Get Tag and set to check if the addr exists in cache */
+/* find_tag_and_set(addr, &tag, &set, is_pim); */
+/* *line_addr = base_cache_line(addr); */
+
+/* if (update_repl) update_cache_on_access(*line_addr, set, appl_id); */
+
+/* // Walk through the set */
+/* for (int ii = 0; ii < m_assoc; ++ii) { */
+/* // For each line in based on associativity */
+/* cache_entry_c *line = &(m_set[set]->m_entry[ii]); */
+
+/* // Check for matching tag and validity */
+/* if (line->m_valid && line->m_tag == tag) { */
+/* // If hit, then return */
+/* assert(line->m_data); */
+
+/* if (update_repl) { */
+/* // If prefetch is set mark it as used */
+/* if (line->m_pref) { */
+/* line->m_pref = false; */
+/* } */
+/* update_line_on_hit(line, set, appl_id); */
+/* } */
+
+/* return line->m_data; */
+/* } */
+/* } */
+
+/* if (update_repl) update_cache_on_miss(set, appl_id); */
+
+/* return NULL; */
+/* } */
 
 void cache_c::update_cache_on_access(Addr line_addr, int set, int appl_id) {
 }

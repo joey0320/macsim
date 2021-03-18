@@ -198,6 +198,8 @@ void allocate_c::run_a_cycle(void) {
     uop->m_alloc_cycle = m_simBase->m_core_cycle[m_core_id];
 
     // allocate physical resources
+    // FIXME : avx instructions do not consist of mem store ?
+    //
     if (req_sb) {
       m_resource->alloc_sb();
       uop->m_req_sb = true;

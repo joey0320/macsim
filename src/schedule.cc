@@ -168,7 +168,9 @@ bool schedule_c::check_srcs(int entry) {
 }
 
 // schedule an uop from reorder buffer
-// called by schedule_io_c::run_a_cycle
+// called by schedule_{io, ooo}_c::run_a_cycle
+//  -> iterates over sched_list & exec ready uops
+//  -> if uop_schedule fails, it stays in the sched_list
 // call exec_c::exec function for uop execution
 bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
   uop_c* cur_uop = (*m_rob)[entry];
@@ -252,6 +254,12 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
   // -------------------------------------
   // execute current uop
   // -------------------------------------
+  // 1) memory
+  //   0  : memory instruction cannot be executed (port busy, ...)
+  //   -1 : cache miss, generate a new request
+  //   >0 : cache hit
+  // 2) branch
+  // 3) others (computation)
   if (!m_exec->exec(-1, entry, cur_uop)) {
     // uop could not m_execute
     DEBUG_CORE(
