@@ -93,7 +93,7 @@ infinite_port 0
 
 
 # LLC Cache
-num_llc 4
+num_llc 6
 llc_num_set 1024
 llc_line_size 64
 llc_assoc 32
