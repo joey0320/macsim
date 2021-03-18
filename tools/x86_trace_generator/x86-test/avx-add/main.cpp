@@ -12,28 +12,13 @@ extern "C" {
   int SIM_BEGIN(int arg) {return 1;}
   int SIM_END(int arg) {return 1;}
 }
-const int sz = 4096;
+const int sz = 1e9;
 
-float a[sz] = {0};
-float b[sz] = {0};
-float c[sz] = {0};
+float *a;
+float *b;
+float *c;
 
-void foo(){
-  __m256 result,B,C;
-  for (int i=0; i<sz; i+=sizeof(__m256)/sizeof(float)){
-    // start pim recording
-    PIM_FUNC_START(1);
-
-    B =  _mm256_load_ps(&b[i]);
-    C =  _mm256_load_ps(&c[i]);
-    result = _mm256_add_ps(B,C);
-    _mm256_store_ps(&a[i], result);
-
-    // end pim recording
-    PIM_FUNC_END(1);
-
-  }
-}
+void foo();
 
 void fill_arrays(){
   for (int i=0; i<sz; i++){
@@ -61,6 +46,14 @@ int main(int argc, char **argv){
   // start simulation trace gen
   SIM_BEGIN(1);
 
+  // we need to allocate aligned memory
+  // not sure if aligned_allloc uses avx instructions??
+  PIM_FUNC_START(1);
+  a = (float *)aligned_alloc(32, sizeof(float) * sz);
+  b = (float *)aligned_alloc(32, sizeof(float) * sz);
+  c = (float *)aligned_alloc(32, sizeof(float) * sz);
+  PIM_FUNC_END(1);
+
   fill_arrays();
   foo();
 
@@ -68,8 +61,29 @@ int main(int argc, char **argv){
     return -1;
 
   printf("Works !!!\n");
+  
+  free(a);
+  free(b);
+  free(c);
 
   // end simulation trace gen
   SIM_END(1);
   return 0;
+}
+
+void foo(){
+  __m256 result,B,C;
+  for (int i=0; i<sz; i+=sizeof(__m256)/sizeof(float)){
+    // start pim recording
+    PIM_FUNC_START(1);
+
+    B =  _mm256_load_ps(&b[i]);
+    C =  _mm256_load_ps(&c[i]);
+    result = _mm256_add_ps(B,C);
+    _mm256_store_ps(&a[i], result);
+
+    // end pim recording
+    PIM_FUNC_END(1);
+
+  }
 }
