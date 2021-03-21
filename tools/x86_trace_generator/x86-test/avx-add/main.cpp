@@ -12,7 +12,7 @@ extern "C" {
   int SIM_BEGIN(int arg) {return 1;}
   int SIM_END(int arg) {return 1;}
 }
-const int sz = 1e9;
+const int sz = 1e8;
 
 float *a;
 float *b;
@@ -43,19 +43,16 @@ int check_arrays(){
 
 int main(int argc, char **argv){
 
-  // start simulation trace gen
-  SIM_BEGIN(1);
-
   // we need to allocate aligned memory
   // not sure if aligned_allloc uses avx instructions??
-  PIM_FUNC_START(1);
   a = (float *)aligned_alloc(32, sizeof(float) * sz);
   b = (float *)aligned_alloc(32, sizeof(float) * sz);
   c = (float *)aligned_alloc(32, sizeof(float) * sz);
-  PIM_FUNC_END(1);
-
   fill_arrays();
+
+  SIM_BEGIN(1);
   foo();
+  SIM_END(1);
 
   if (check_arrays())
     return -1;
@@ -66,8 +63,6 @@ int main(int argc, char **argv){
   free(b);
   free(c);
 
-  // end simulation trace gen
-  SIM_END(1);
   return 0;
 }
 

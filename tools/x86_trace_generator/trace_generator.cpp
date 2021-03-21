@@ -792,6 +792,13 @@ void instrument(INS ins)
   // ----------------------------------------
   if (INS_Category(ins) == XED_CATEGORY_AVX ||
       INS_Category(ins) == XED_CATEGORY_AVX2 ||
+      INS_Category(ins) == XED_CATEGORY_AVX2GATHER ||
+      INS_Category(ins) == XED_CATEGORY_AVX512 ||
+      INS_Category(ins) == XED_CATEGORY_AVX512_4FMAPS ||
+      INS_Category(ins) == XED_CATEGORY_AVX512_4VNNIW ||
+      INS_Category(ins) == XED_CATEGORY_AVX512_BITALG ||
+      INS_Category(ins) == XED_CATEGORY_AVX512_VBMI ||
+      INS_Category(ins) == XED_CATEGORY_AVX512_VP2INTERSECT ||
       INS_Category(ins) == XED_CATEGORY_FCMOV ||
       INS_Category(ins) == XED_CATEGORY_X87_ALU || 
       INS_Category(ins) == XED_CATEGORY_MMX ||
