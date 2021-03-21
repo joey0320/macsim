@@ -44,6 +44,9 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "all_knobs.h"
 
+#include "stdio.h"
+#include <iostream>
+#include <fstream>
 // TOCHECK FIXME
 // max_cnt is why 2 times more than rob size?
 
@@ -294,6 +297,56 @@ bool rob_c::check_range(int idx) {
   } else {
     return (idx >= m_first_entry || idx <= m_last_entry);
   }
+}
+
+void rob_c::print_rob_info() {
+
+  std::ofstream file;
+  file.open("debug_rob.out");
+  if (m_first_entry == m_last_entry) {
+    std::cout << "rob is empty" << endl;
+  } else if (m_first_entry < m_last_entry) {
+    for (int ii = m_first_entry; ii < m_last_entry; ii++) {
+      uop_c *uop = m_rob[ii];
+      file << "rob[" << ii << "]" << endl
+        << uop << endl
+        << "uop->m_pim_region : " << uop->m_pim_region << endl
+        << "uop->m_avx_type : " << uop->m_avx_type << endl
+        << "uop->m_bar_type : " << uop->m_bar_type << endl
+        << "uop->m_bp_cycle : " << uop->m_bp_cycle << endl
+        << "uop->m_alloc_cycle : " << uop->m_alloc_cycle << endl
+        << "uop->m_sched_cycle : " << uop->m_sched_cycle << endl
+        << "uop->m_exec_cycle : " << uop->m_exec_cycle << endl
+        << "uop->m_done_cycle : " << uop->m_done_cycle << endl;
+    }
+  } else {
+    for (int ii = m_first_entry; ii < m_max_cnt; ii++ ) {
+      uop_c *uop = m_rob[ii];
+      file << "rob[" << ii << "]" << endl
+        << uop << endl
+        << "uop->m_pim_region : " << uop->m_pim_region << endl
+        << "uop->m_avx_type : " << uop->m_avx_type << endl
+        << "uop->m_bar_type : " << uop->m_bar_type << endl
+        << "uop->m_bp_cycle : " << uop->m_bp_cycle << endl
+        << "uop->m_alloc_cycle : " << uop->m_alloc_cycle << endl
+        << "uop->m_sched_cycle : " << uop->m_sched_cycle << endl
+        << "uop->m_exec_cycle : " << uop->m_exec_cycle << endl
+        << "uop->m_done_cycle : " << uop->m_done_cycle << endl;
+    }
+    for (int ii = 0; ii < m_last_entry; ii++) {
+      uop_c *uop = m_rob[ii];
+      file << "rob[" << ii << "]" << endl
+        << "uop->m_pim_region : " << uop->m_pim_region << endl
+        << "uop->m_avx_type : " << uop->m_avx_type << endl
+        << "uop->m_bar_type : " << uop->m_bar_type << endl
+        << "uop->m_bp_cycle : " << uop->m_bp_cycle << endl
+        << "uop->m_alloc_cycle : " << uop->m_alloc_cycle << endl
+        << "uop->m_sched_cycle : " << uop->m_sched_cycle << endl
+        << "uop->m_exec_cycle : " << uop->m_exec_cycle << endl
+        << "uop->m_done_cycle : " << uop->m_done_cycle << endl;
+    }
+  }
+  file.close();
 }
 
 

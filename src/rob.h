@@ -229,6 +229,8 @@ public:
 
   bool check_range(int idx);
 
+  void print_rob_info(void);
+
 private:
   bool is_later_entry(int first_fence_entry, int entry);
   void print_fence_entries(enum fence_type ft = FENCE_FULL);

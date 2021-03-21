@@ -48,6 +48,11 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "global_types.h"
 
 #define _DEBUG_IRIS
+
+// to enable pim
+#define LLC_PIM
+/* #define LLC_MSHR */
+#define DB_SKIP
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// \brief Memory component type
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -173,6 +178,17 @@ typedef struct mem_req_s {
 
   function<bool(mem_req_s*)> m_done_func; /**< done function */
   list<mem_req_s*> m_merge; /**< merged request list */
+
+  // Added by Joonho
+  // PIM : 2 types of mem_rq
+#ifdef LLC_PIM
+  bool m_start_llc;
+  mem_req_s* m_merged_req_llc; /**< merged request */
+  int m_llc_id;
+  list<mem_req_s*> m_merge_llc; /**< merged request list */
+  function<bool(mem_req_s*)> m_done_func_llc;
+#endif
+
 } mem_req_s;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

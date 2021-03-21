@@ -95,4 +95,11 @@ void mem_req_s::init(void) {
   m_msg_dst = 0;
   m_done_func = NULL;
   m_bypass = 0;
+
+#ifdef LLC_PIM
+  m_start_llc = false;
+  m_merged_req_llc = NULL;
+  m_llc_id = 0;
+  m_done_func_llc = NULL;
+#endif
 }

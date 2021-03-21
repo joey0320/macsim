@@ -46,10 +46,6 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #define MemType_Prefetch(x) (x >= MEM_SWPREF_NTA && x <= MEM_SWPREF_T2)
 #define MRT_Prefetch(x) (x >= MRT_SW_DPRF && x <= MRT_SW_DPRF_T2)
-
-// comment this to disable LLC hashing
-#define LLC_HASHING
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 enum COHERENCE_STATE {
@@ -257,6 +253,14 @@ public:
    * Invalidate cache lines of the given page
    */
   void invalidate(Addr page_addr);
+
+#ifdef LLC_PIM
+  int access_llc(uop_c* uop);
+#endif
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  bool insert_oq(mem_req_s* req);
+#endif
 
 private:
   /**
@@ -496,6 +500,18 @@ public:
    */
   virtual void invalidate(Addr page_addr);
 
+#ifdef LLC_PIM
+#endif
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  bool new_mem_req_llc(Mem_Req_Type type, Addr addr, uns size, bool cache_hit,
+                       bool with_data, uns delay, uop_c* uop,
+                       function<bool(mem_req_s*)> done_func, Counter unique_num,
+                       pref_req_info_s* pref_info, int core_id, int thread_id,
+                       bool ptx);
+  void free_req_llc(int llc_id, mem_req_s* req);
+#endif
+
 public:
   static int m_unique_id; /**< unique memory request id */
 
@@ -507,14 +523,25 @@ protected:
    */
   mem_req_s* allocate_new_entry(int core_id);
 
+  //moving init_new_req to public
+public:
   /**
    * Initialize a new request
    */
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  void init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr, int size,
+                    bool with_data, int delay, uop_c* uop,
+                    function<bool(mem_req_s*)> done_func, Counter unique_num,
+                    Counter priority, int core_id, int thread_id, bool ptx,
+                    bool from_llc, int llc_id);
+#else
   void init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr, int size,
                     bool with_data, int delay, uop_c* uop,
                     function<bool(mem_req_s*)> done_func, Counter unique_num,
                     Counter priority, int core_id, int thread_id, bool ptx);
+#endif
 
+protected:
   /**
    * Adjust a new request. In case of finding matching entry, we need to adjust
    * fields of the matching request
@@ -544,6 +571,15 @@ protected:
    */
   void flush_prefetch(int core_id);
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  mem_req_s* search_req_llc(int llc_id, Addr addr, int size); 
+
+  mem_req_s* allocate_new_entry_llc(int llc_id);
+  
+  void flush_prefetch_llc(int llc_id);
+#endif
+
+
 protected:
   dcu_c** m_l1_cache; /**< L1 caches */
   dcu_c** m_l2_cache; /**< L2 caches */
@@ -551,6 +587,10 @@ protected:
   dcu_c** m_llc_cache; /**< LLC caches */
   list<mem_req_s*>* m_mshr; /**< mshr entry per L1 cache */
   list<mem_req_s*>* m_mshr_free_list; /**< mshr entry free list */
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  list<mem_req_s*>* m_mshr_llc; /**< mshr entry per L1 cache */
+  list<mem_req_s*>* m_mshr_free_list_llc; /**< mshr entry free list */
+#endif
   int m_num_core; /**< number of cores */
   int m_num_cpu;
   int m_num_gpu;

@@ -139,6 +139,33 @@ bool dcache_fill_line_wrapper(mem_req_s* req) {
   return result;
 }
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+bool dcache_fill_line_wrapper_llc(mem_req_s* req) {
+  bool result = true;
+  list<mem_req_s*> done_list;
+  for (auto I = req->m_merge_llc.begin(), E = req->m_merge_llc.end(); I != E; ++I) {
+    if ((*I)->m_done_func_llc && !((*I)->m_done_func_llc((*I)))) {
+      result = false;
+      continue;
+    }
+    done_list.push_back((*I));
+  }
+
+  // process merged requests
+  for (auto I = done_list.begin(), E = done_list.end(); I != E; ++I) {
+    req->m_merge_llc.remove((*I));
+    req->m_simBase->m_memory->free_req_llc((*I)->m_llc_id, (*I));
+  }
+
+  // process the request
+  if (result && req->m_done_func_llc && !req->m_simBase->m_memory->done(req)) {
+    result = false;
+  }
+
+  return result;
+}
+#endif
+
 bool dcache_write_ack_wrapper(mem_req_s* req) {
   assert(req->m_done_func && req->m_simBase->m_memory->write_done(req));
   return true;
@@ -589,7 +616,6 @@ int dcu_c::access(uop_c* uop) {
     } else {
       req_size = m_line_size;
       req_addr = line_addr;
-
     }
 
     // FIXME (jaekyu, 10-26-2011)
@@ -637,6 +663,210 @@ int dcu_c::access(uop_c* uop) {
   return -1;  // cache miss
 }
 
+/* #if defined(LLC_PIM) && !defined(DB_SKIP) */
+#ifdef LLC_PIM
+int dcu_c::access_llc(uop_c* uop) {
+#ifndef DB_SKIP
+  ASSERT(m_level == MEM_LLC);
+  ASSERT(uop->m_pim_region && uop->m_avx_type);
+  ASSERT(uop->m_mem_type == MEM_LD || MEM_ST);
+  
+  uop->m_state = OS_DCACHE_BEGIN;
+
+  dcache_data_s* line = NULL;
+
+  Addr vaddr = uop->m_paddr;
+  Mem_Type type = uop->m_mem_type;
+
+  Addr line_addr = base_addr(vaddr);
+  int bank = BANK(vaddr, m_banks, 256);
+
+  ASSERT(0 <= bank && bank < m_banks);
+
+  // -------------------------------------
+  // DCACHE port access
+  // -------------------------------------
+  if (*m_simBase->m_knobs->KNOB_DCACHE_INFINITE_PORT || m_disable == true) {
+    // do nothing
+  } else if (IsStore(type) && !m_port[bank]->get_write_port(m_cycle - 1)) {
+    // port busy
+    STAT_EVENT(CACHE_BANK_BUSY);
+    // FIXME : what does 64 stand for??
+    uop->m_dcache_bank_id = bank + 64; 
+    uop->m_state = OS_DCACHE_PORT_UNAVAILABLE;
+    return 0;
+  } else if (IsLoad(type) && !m_port[bank]->get_read_port(m_cycle - 1)) {
+    // port busy
+    STAT_EVENT(CACHE_BANK_BUSY);
+    uop->m_dcache_bank_id = bank;
+    uop->m_state = OS_DCACHE_PORT_UNAVAILABLE;
+    return 0;
+  }
+
+  // -------------------------------------
+  // DCACHE access
+  // -------------------------------------
+  bool cache_hit = false;
+  if (*m_simBase->m_knobs->KNOB_PERFECT_DCACHE) {
+    cache_hit = true;
+  } else if (m_disable == true) {
+    cache_hit = false;
+  } else {
+    int appl_id =
+      m_simBase->m_core_pointers[uop->m_core_id]->get_appl_id(uop->m_thread_id);
+    line =
+      (dcache_data_s*)m_cache->access_cache(vaddr, &line_addr, true, appl_id);
+    cache_hit = (line) ? true : false;
+
+    POWER_EVENT(POWER_LLC_R_TAG);
+
+    // prefetch cache should be here
+  }
+
+  // -------------------------------------
+  // DCACHE hit
+  // -------------------------------------
+  if (cache_hit) { //cache hit
+    POWER_EVENT(POWER_LLC_R);
+    STAT_EVENT(LLC_HIT_CPU + this->m_acc_sim);
+    DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache hit [*] direct llc access\n", m_level,
+               m_id, uop->m_uop_num);
+    // stat
+    uop->m_uop_info.m_dcmiss = false;
+
+    if (line && IsStore(type)) line->m_dirty = true;
+
+    if (*m_simBase->m_knobs->KNOB_ENABLE_CACHE_COHERENCE) {
+    }
+
+    return m_latency;
+  }
+  // -------------------------------------
+  // DCACHE miss
+  // -------------------------------------
+  else {  // !cache_hit
+    STAT_EVENT(LLC_MISS_CPU + this->m_acc_sim);
+
+    // -------------------------------------
+    // hardware prefetcher training
+    // -------------------------------------
+    // NO prefetching for LLC is guess...
+
+    // stat
+    uop->m_uop_info.m_dcmiss = true;
+
+    // set type;
+    Mem_Req_Type req_type;
+    switch (type) {
+      case MEM_LD:
+      case MEM_LD_LM:
+      case MEM_LD_CM:
+      case MEM_LD_TM:
+        req_type = MRT_DFETCH;
+        break;
+      case MEM_ST:
+      case MEM_ST_LM:
+      case MEM_ST_GM:
+        req_type = MRT_DSTORE;
+        break;
+      case MEM_SWPREF_NTA:
+      case MEM_SWPREF_T0:
+      case MEM_SWPREF_T1:
+      case MEM_SWPREF_T2:
+      case MEM_PF:
+        req_type = MRT_DPRF;
+        break;
+      default:
+        ASSERTM(0, "type:%d\n", type);
+    }
+
+    // -------------------------------------
+    // set address and size
+    // -------------------------------------
+    int req_size;
+    Addr req_addr;
+    req_size = m_line_size;
+    req_addr = line_addr;
+
+    // -------------------------------------
+    // Generate a new memory request (MSHR access)
+    // -------------------------------------
+    function<bool(mem_req_s*)> done_func = NULL;
+    done_func = dcache_fill_line_wrapper_llc;
+
+    int result;
+    result = m_simBase->m_memory->new_mem_req_llc(
+      req_type, req_addr, req_size, cache_hit,
+      (type == MEM_ST_GM || type == MEM_ST_LM), m_latency, uop, done_func,
+      uop->m_unique_num, NULL, m_id, uop->m_thread_id, m_acc_sim);
+
+    // -------------------------------------
+    // MSHR full
+    // -------------------------------------
+    if (!result) {
+      uop->m_state = OS_DCACHE_MEM_ACCESS_DENIED;
+      return 0;
+    }
+    // -------------------------------------
+    // In case of software prefetch, generate pref request and retire the instruction
+    // -------------------------------------
+    else if (req_type == MRT_DPRF) {
+      return m_latency;
+    }
+#else
+
+  Addr vaddr = uop->m_paddr;
+  Mem_Type type = uop->m_mem_type;
+  Addr line_addr = base_addr(vaddr);
+
+  bool cache_hit = false;
+  int bank = BANK(vaddr, m_banks, 256);
+
+  int req_size = m_line_size;
+  Addr req_addr = line_addr;
+  
+  Mem_Req_Type req_type;
+  switch (type) {
+    case MEM_LD:
+    case MEM_LD_LM:
+    case MEM_LD_CM:
+    case MEM_LD_TM:
+      req_type = MRT_DFETCH;
+      break;
+    case MEM_ST:
+    case MEM_ST_LM:
+    case MEM_ST_GM:
+      req_type = MRT_DSTORE;
+      break;
+    case MEM_SWPREF_NTA:
+    case MEM_SWPREF_T0:
+    case MEM_SWPREF_T1:
+    case MEM_SWPREF_T2:
+    case MEM_PF:
+      req_type = MRT_DPRF;
+      break;
+    default:
+      ASSERTM(0, "type:%d\n", type);
+  }
+
+  Counter priority = g_mem_priority[type];
+  function<bool(mem_req_s*)> done_func = NULL;
+  done_func = dcache_fill_line_wrapper;
+
+  mem_req_s *new_req = new mem_req_s(m_simBase);
+  m_memory->init_new_req(new_req, req_type, req_addr, req_size, false, m_latency, uop, done_func,
+               uop->m_unique_num, priority, uop->m_core_id, uop->m_thread_id, false);
+
+  new_req->m_start_llc = true;
+  
+  this->insert(new_req);
+
+  return -1;  // cache miss
+        
+#endif
+}
+#endif
+
 // fill a cache line (fill_queue)
 bool dcu_c::fill(mem_req_s* req) {
   macsim_c* m_simBase = req->m_simBase;
@@ -680,6 +910,19 @@ bool dcu_c::insert(mem_req_s* req) {
   return false;
 }
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+bool dcu_c::insert_oq(mem_req_s* req) {
+  if (m_out_queue->push(req)) {
+    req->m_queue = m_out_queue;
+    req->m_rdy_cycle = m_cycle;
+   return true;
+  } else {
+   m_retry_queue.emplace_back(req);
+  }
+  return false;
+} 
+#endif
+
 // =======================================
 // cache run_a_cycle
 // =======================================
@@ -692,10 +935,24 @@ void dcu_c::run_a_cycle(bool pll_lock) {
   if (!m_retry_queue.empty()) {
     for (auto it = m_retry_queue.begin(); it != m_retry_queue.end();
          /* do nothing */) {
+#if defined(LLC_PIM) 
+      if ((*it)->m_start_llc) {
+        if (m_out_queue->push(*it))
+          it = m_retry_queue.erase(it);
+        else
+          ++it;
+      } else {
+        if (m_in_queue->push(*it))
+          it = m_retry_queue.erase(it);
+        else
+          ++it;
+      }
+#else
       if (m_in_queue->push(*it))
         it = m_retry_queue.erase(it);
       else
         ++it;
+#endif
     }
   }
 
@@ -1189,10 +1446,24 @@ void dcu_c::process_fill_queue() {
         if (m_done == true) {
           ASSERTM(m_level != MEM_LLC, "req:%d type:%s", req->m_id,
                   mem_req_c::mem_req_type_name[req->m_type]);
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+          if (req->m_start_llc) {
+            if (req->m_done_func_llc && !req->m_done_func_llc(req)) {
+              req->m_state = MEM_FILL_WAIT_DONE;
+              continue;
+            }
+          } else {
+            if (req->m_done_func && !req->m_done_func(req)) {
+              req->m_state = MEM_FILL_WAIT_DONE;
+              continue;
+            }
+          }
+#else
           if (req->m_done_func && !req->m_done_func(req)) {
             req->m_state = MEM_FILL_WAIT_DONE;
             continue;
           }
+#endif
           req->m_done = true;
           DEBUG_CORE(
             req->m_core_id,
@@ -1270,8 +1541,13 @@ void dcu_c::process_fill_queue() {
       // MEM_FILL_NEW -> MEM_FILL_WAIT_DONE : waiting done_func is successfully done
       // -------------------------------------
       case MEM_FILL_WAIT_DONE: {
-        if (req->m_done_func && !req->m_done_func(req)) continue;
-
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+        if (req->m_start_llc) {
+          if (req->m_done_func_llc && !req->m_done_func_llc(req)) continue;
+        } else 
+#else
+          if (req->m_done_func && !req->m_done_func(req)) continue;
+#endif
         req->m_done = true;
         done_list.push_back(req);
         ++count;
@@ -1327,12 +1603,20 @@ void dcu_c::process_fill_queue() {
         m_level, m_id, req->m_id, mem_req_c::mem_req_type_name[req->m_type],
         m_cycle - req->m_in);
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+      if (req->m_start_llc) {
+        m_memory->free_req_llc(req->m_llc_id, req);
+      } else {
+        m_memory->free_req(req->m_core_id, req);
+      }
+#else
       if (req->m_acc && *m_simBase->m_knobs->KNOB_COMPUTE_CAPABILITY == 2.0f &&
           req->m_type == MRT_DSTORE) {
         m_simBase->m_memory->free_write_req(req);
       } else {
         m_memory->free_req(req->m_core_id, req);
       }
+#endif
     }
   }
 
@@ -1611,6 +1895,20 @@ memory_c::memory_c(macsim_c* simBase) {
     }
   }
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  // implement lock free cache for LLC
+  m_mshr_llc = new list<mem_req_s*>[m_num_llc];
+  m_mshr_free_list_llc = new list<mem_req_s*>[m_num_llc];
+ 
+ // TODO : add mshr knob for pim 
+  for (int ii = 0; ii < m_num_llc; ++ii) {
+    for (int jj = 0; jj < *m_simBase->m_knobs->KNOB_MEM_MSHR_SIZE; ++jj) {
+      mem_req_s *entry = new mem_req_s(simBase);
+      m_mshr_free_list_llc[ii].push_back(entry);
+    }
+  }
+#endif
+
   m_mem_req_pool = new pool_c<mem_req_s>;
 
   int num_large_core = *m_simBase->m_knobs->KNOB_NUM_SIM_LARGE_CORES;
@@ -1709,12 +2007,23 @@ memory_c::~memory_c() {
     m_mshr[ii].clear();
   }
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  for (int ii = 0; ii < m_num_llc; ++ii) {
+    m_mshr_free_list_llc[ii].clear();
+    m_mshr_llc[ii].clear();
+  }
+#endif
+
   for (int ii = 0; ii < m_num_l3; ++ii) delete m_l3_cache[ii];
 
   for (int ii = 0; ii < m_num_llc; ++ii) delete m_llc_cache[ii];
 
   delete[] m_mshr;
   delete[] m_mshr_free_list;
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  delete[] m_mshr_llc;
+  delete[] m_mshr_free_list_llc;
+#endif
   delete[] m_l1_cache;
   delete[] m_l2_cache;
   delete[] m_l3_cache;
@@ -1841,8 +2150,16 @@ bool memory_c::new_mem_req(Mem_Req_Type type, Addr addr, uns size,
   Counter priority = g_mem_priority[type];
 
   // init new request
+  int llc_slice = llc_hash(addr);
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  init_new_req(new_req, type, addr, size, with_data, delay, uop, done_func,
+               unique_num, priority, core_id, thread_id, ptx, false, llc_slice);
+  new_req->m_start_llc = true;
+#else
   init_new_req(new_req, type, addr, size, with_data, delay, uop, done_func,
                unique_num, priority, core_id, thread_id, ptx);
+  new_req->m_start_llc = false;
+#endif
 
   // merge to existing request
   if (ptx && *m_simBase->m_knobs->KNOB_COMPUTE_CAPABILITY == 2.0f &&
@@ -1875,6 +2192,125 @@ bool memory_c::new_mem_req(Mem_Req_Type type, Addr addr, uns size,
   return true;
 }
 
+// TODO 
+// : Fix DEBUG statements
+// : Modify prefetching part
+// : Add simultaneous fetching to memory & higher level caches
+//
+// LLC PIM is enabled
+// Need to consider direct LLC access
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+bool memory_c::new_mem_req_llc(Mem_Req_Type type, Addr addr, uns size,
+                           bool cache_hit, bool with_data, uns delay,
+                           uop_c* uop, function<bool(mem_req_s*)> done_func,
+                           Counter unique_num, pref_req_info_s* pref_info,
+                           int llc_id, int thread_id, bool ptx) {
+  DEBUG_CORE(llc_id, "MSHR_LLC[%d] new_req type:%s (%d)\n", llc_id,
+             mem_req_c::mem_req_type_name[type], (int)m_mshr_llc[llc_id].size());
+
+  if (m_stop_prefetch > m_cycle && type == MRT_DPRF) {
+    DEBUG_CORE(llc_id, "PREFETCHING blocked\n");
+    return true;
+  }
+
+  assert(type == MRT_DSTORE || type == MRT_DFETCH);
+
+  // find a matching request
+#ifdef LLC_MSHR
+  mem_req_s* matching_req = NULL;
+  for (int i = 0; i < m_num_llc; ++i) {
+    matching_req = search_req_llc(i, addr, size);
+    if (matching_req != NULL) break;
+  }
+#endif
+
+/* if (type == MRT_IFETCH) { */
+/* POWER_CORE_EVENT(core_id, POWER_ICACHE_MISS_BUF_R_TAG); */
+/* } else { */
+/* // cache hit will be true only for writes to global memory */
+/* // (write-evict for global memory in L1) */
+/* if (!cache_hit) { */
+/* POWER_CORE_EVENT(core_id, POWER_DCACHE_MISS_BUF_R_TAG); */
+/* } */
+/* } */
+
+  // allocate an entry
+  mem_req_s* new_req = NULL;
+
+  new_req = allocate_new_entry_llc(llc_id);
+
+#ifdef LLC_MSHR
+  // mshr full
+  if (new_req == NULL) {
+    DEBUG_CORE(llc_id, "MSHR_FULL_LLC\n");
+    m_stop_prefetch = m_cycle + 500;
+    flush_prefetch_llc(llc_id);
+    if (type == MRT_DPRF) return true;
+
+    new_req = allocate_new_entry_llc(llc_id);
+
+    if (new_req == NULL) {
+      STAT_EVENT(MSHR_FULL);
+      return false;
+    }
+  }
+#else
+  if (new_req == NULL)
+    return false;
+#endif
+
+  if (type == MRT_IFETCH) {
+    POWER_CORE_EVENT(llc_id, POWER_ICACHE_MISS_BUF_W);
+  } else if (type == MRT_DSTORE) {
+    POWER_CORE_EVENT(llc_id, POWER_DCACHE_MISS_BUF_W);
+  } else {
+    POWER_CORE_EVENT(llc_id, POWER_DCACHE_MISS_BUF_W);
+  }
+  STAT_EVENT(TOTAL_MEMORY);
+  POWER_EVENT(POWER_MC_R);
+
+  Counter priority = g_mem_priority[type];
+
+  // init new request
+  init_new_req(new_req, type, addr, size, with_data, delay, uop, done_func,
+               unique_num, priority, uop->m_core_id, thread_id, ptx, true, llc_id);
+
+  // merge to existing request
+#ifdef LLC_MSHR
+  if (matching_req) {
+    STAT_EVENT(TOTAL_MEMORY_MERGE);
+    DEBUG_CORE(
+      llc_id,
+      "req:%d addr:0x%llx has matching entry req:%d addr:0x%llx type:%s\n",
+      new_req->m_id, new_req->m_addr, matching_req->m_id, matching_req->m_addr,
+      mem_req_c::mem_req_type_name[matching_req->m_type]);
+
+    matching_req->m_merge_llc.push_back(new_req);
+    new_req->m_merged_req_llc = matching_req;
+    new_req->m_state = MEM_MERGED;
+
+    // adjust priority
+    if (matching_req->m_priority < priority)
+      matching_req->m_priority = priority;
+
+    return true;
+  }
+#else
+#endif
+
+/* #ifdef DB_SKIP */
+  // for LLC we have to push the req to noc
+  if (!m_llc_cache[llc_id]->insert_oq(new_req)) { // out_queue full
+    return false;
+  }
+  new_req->m_state = MEM_OUTQUEUE_NEW;
+  new_req->m_rdy_cycle = m_cycle + 1;
+/* #endif */
+
+  return true;
+}
+#endif
+
 // allocate a new memory request
 mem_req_s* memory_c::allocate_new_entry(int core_id) {
   if (m_mshr_free_list[core_id].empty()) return NULL;
@@ -1885,6 +2321,23 @@ mem_req_s* memory_c::allocate_new_entry(int core_id) {
 
   return new_req;
 }
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+mem_req_s* memory_c::allocate_new_entry_llc(int llc_id) {
+
+#ifdef LLC_MSHR
+  if (m_mshr_free_list_llc[llc_id].empty()) return NULL;
+
+  mem_req_s* new_req = m_mshr_free_list_llc[llc_id].back();
+  m_mshr_free_list_llc[llc_id].pop_back();
+  m_mshr_llc[llc_id].push_back(new_req);
+  return new_req;
+#else
+  mem_req_s* new_req = new mem_req_s(m_simBase);
+  return new_req;
+#endif
+}
+#endif
 
 // search matching request
 mem_req_s* memory_c::search_req(int core_id, Addr addr, int size) {
@@ -1899,7 +2352,72 @@ mem_req_s* memory_c::search_req(int core_id, Addr addr, int size) {
   return NULL;
 }
 
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+mem_req_s* memory_c::search_req_llc(int llc_id, Addr addr, int size) {
+  for (auto I = m_mshr_llc[llc_id].begin(), E = m_mshr_llc[llc_id].end(); I != E;
+       ++I) {
+    mem_req_s* req = (*I);
+    if (req->m_addr <= addr && req->m_addr + req->m_size >= addr + size) {
+      return req;
+    }
+  }
+  return NULL;
+}
+#endif
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
 // initialize a new request
+void memory_c::init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
+                            int size, bool with_data, int delay, uop_c* uop,
+                            function<bool(mem_req_s*)> done_func,
+                            Counter unique_num, Counter priority, int core_id,
+                            int thread_id, bool ptx, bool from_llc, int llc_id) {
+  req->m_id = m_unique_id++;
+  req->m_appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(thread_id);
+  req->m_core_id = core_id;
+  req->m_thread_id = thread_id;
+  req->m_block_id = 0;
+  req->m_state = MEM_NEW;
+  req->m_type = type;
+  req->m_priority = priority;
+  req->m_addr = addr;
+  req->m_size = size;
+  req->m_with_data = with_data;
+  req->m_rdy_cycle = m_cycle + delay;
+  req->m_pc = uop ? uop->m_pc : 0;
+  req->m_prefetcher_id = 0;
+  req->m_pref_loadPC = 0;
+  req->m_acc = ptx;
+  req->m_done_func = done_func;
+  req->m_uop = uop ? uop : NULL;
+  if (type == MRT_DPRF) req->m_uop = NULL;
+  req->m_in = m_cycle;
+  req->m_core_in = m_simBase->m_core_cycle[core_id];
+  req->m_in_global = CYCLE;
+  req->m_dirty = false;
+  req->m_done = false;
+  req->m_merged_req = NULL;
+  req->m_bypass = uop ? uop->m_bypass_llc : false;
+  req->m_skip = uop ? uop->m_skip_llc : false;
+
+  ASSERT(req->m_merge.empty());
+
+#ifndef DB_SKIP
+  req->m_start_llc = from_llc;
+  req->m_llc_id = llc_id;
+
+  if (req->m_start_llc) {
+    req->m_done_func = NULL;
+    req->m_done_func_llc = done_func;
+  } else {
+    req->m_done_func = done_func;
+    req->m_done_func_llc = NULL;
+  } 
+#endif
+
+  set_cache_id(req);
+}
+#else
 void memory_c::init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
                             int size, bool with_data, int delay, uop_c* uop,
                             function<bool(mem_req_s*)> done_func,
@@ -1937,6 +2455,7 @@ void memory_c::init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
 
   set_cache_id(req);
 }
+#endif
 
 // adjust a new request
 void memory_c::adjust_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
@@ -1979,7 +2498,7 @@ void memory_c::set_cache_id(mem_req_s* req) {
   req->m_cache_id[MEM_L3] = BANK(req->m_addr, m_num_l3, m_l3_interleave_factor);
   
   // TODO change here : for LLC hashing
-#ifdef LLC_HASHING
+#ifdef LLC_PIM
   req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
 #else
   req->m_cache_id[MEM_LLC] =
@@ -1995,15 +2514,38 @@ void memory_c::free_req(int core_id, mem_req_s* req) {
   STAT_EVENT(AVG_MEMORY_LATENCY_BASE);
   STAT_EVENT_N(AVG_MEMORY_LATENCY, m_cycle - req->m_in);
 
+#if defined(LLC_PIM) && !defined(LLC_MSHR)
+  if (req->m_start_llc) {
+    delete req;
+  } else {
+    // when there are still merged requests, call done wrapper function
+    if (!req->m_merge.empty()) {
+      DEBUG_CORE(req->m_core_id, "req:%d has merged req type:%s\n", req->m_id,
+          mem_req_c::mem_req_type_name[req->m_type]);
+      dcache_fill_line_wrapper(req);
+    }
+
+    ASSERTM(req->m_merge.empty(), "type:%s\n",
+        mem_req_c::mem_req_type_name[req->m_type]);
+
+    if (req->m_type == MRT_WB) {
+      delete req;
+    } else {
+      req->init();
+      m_mshr[core_id].remove(req);
+      m_mshr_free_list[core_id].push_back(req);
+    }
+  }
+#else
   // when there are still merged requests, call done wrapper function
   if (!req->m_merge.empty()) {
     DEBUG_CORE(req->m_core_id, "req:%d has merged req type:%s\n", req->m_id,
-               mem_req_c::mem_req_type_name[req->m_type]);
+        mem_req_c::mem_req_type_name[req->m_type]);
     dcache_fill_line_wrapper(req);
   }
 
   ASSERTM(req->m_merge.empty(), "type:%s\n",
-          mem_req_c::mem_req_type_name[req->m_type]);
+      mem_req_c::mem_req_type_name[req->m_type]);
 
   if (req->m_type == MRT_WB) {
     delete req;
@@ -2012,7 +2554,38 @@ void memory_c::free_req(int core_id, mem_req_s* req) {
     m_mshr[core_id].remove(req);
     m_mshr_free_list[core_id].push_back(req);
   }
+#endif
 }
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+void memory_c::free_req_llc(int llc_id, mem_req_s* req) {
+  STAT_EVENT(AVG_MEMORY_LATENCY_BASE);
+  STAT_EVENT_N(AVG_MEMORY_LATENCY, m_cycle - req->m_in);
+
+  // when there are still merged requests, call done wrapper function
+#ifdef LLC_MSHR
+  if (!req->m_merge_llc.empty()) {
+    DEBUG_CORE(req->m_llc_id, "req:%d has merged req type:%s\n", req->m_id,
+               mem_req_c::mem_req_type_name[req->m_type]);
+    dcache_fill_line_wrapper_llc(req);
+  }
+
+  ASSERTM(req->m_merge_llc.empty(), "type:%s\n",
+          mem_req_c::mem_req_type_name[req->m_type]);
+
+  if (req->m_type == MRT_WB) {
+    delete req;
+  } else {
+    req->init();
+    m_mshr_llc[llc_id].remove(req);
+    m_mshr_free_list_llc[llc_id].push_back(req);
+  }
+#else
+  free(req);
+#endif
+
+}
+#endif
 
 void memory_c::free_write_req(mem_req_s* req) {
   STAT_EVENT(AVG_MEMORY_LATENCY_BASE);
@@ -2028,7 +2601,33 @@ int memory_c::get_num_avail_entry(int core_id) {
 
 // access L1 cache from execution stage
 int memory_c::access(uop_c* uop) {
+#ifndef LLC_PIM
   return m_l1_cache[uop->m_core_id]->access(uop);
+#else
+
+  if (uop->m_pim_region && uop->m_avx_type) { //offload to LLC pim
+/* #ifndef DB_SKIP */
+    // access TLB
+    if (*m_simBase->m_knobs->KNOB_ENABLE_PHYSICAL_MAPPING) {
+      bool success = m_simBase->m_MMU->translate(uop);
+      if (!success) return -1;  // treat a TLB miss as a longer latency cache miss
+    } else {
+      uop->m_paddr = uop->m_vaddr;
+    }
+
+    // get llc slice
+    int llc_id = llc_hash(uop->m_paddr) % m_num_llc;
+
+    // access llc
+    assert(llc_id >= 0 && llc_id < m_num_llc);
+    return m_llc_cache[llc_id]->access_llc(uop);
+/* #else */
+/* return m_l1_cache[uop->m_core_id]->access(uop); */
+/* #endif */
+  } else { // normal access to mem hierarchy
+    return m_l1_cache[uop->m_core_id]->access(uop);
+  }
+#endif
 }
 
 Addr memory_c::base_addr(int core_id, Addr addr) {
@@ -2173,6 +2772,33 @@ void memory_c::print_mshr(void) {
     fprintf(fp, "\n");
   }
   fclose(fp);
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+  fp = fopen("bug_detect_mem_llc.out", "w");
+  for (int ii = 0; ii < m_num_llc; ++ii) {
+    fprintf(fp, "== llc_id %d ==\n", ii);
+    fprintf(fp, "%-20s %-10s %-10s %-15s %-15s %-7s %-20s %-15s %-15s\n", "ID",
+            "IN_TIME", "DELTA", "TYPE", "STATE", "MERGED", "MERGED_ID",
+            "MERGED_TYPE", "MERGED_STATE");
+
+    for (auto I = m_mshr_llc[ii].begin(), E = m_mshr_llc[ii].end(); I != E; ++I) {
+      mem_req_s* req = (*I);
+      fprintf(
+        fp, "%-20d %-10llu %-10llu %-15s %-15s %-7d %-20d %-15s %-15s\n",
+        req->m_id, req->m_in, m_cycle - req->m_in,
+        mem_req_c::mem_req_type_name[req->m_type],
+        mem_req_c::mem_state[req->m_state], (req->m_merged_req_llc ? 1 : 0),
+        (req->m_merged_req_llc ? req->m_merged_req_llc->m_id : -1),
+        (req->m_merged_req_llc
+           ? mem_req_c::mem_req_type_name[req->m_merged_req_llc->m_type]
+           : "NULL"),
+        (req->m_merged_req_llc ? mem_req_c::mem_state[req->m_merged_req_llc->m_state]
+                           : NULL));
+    }
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+#endif
 }
 
 // flush all prefetches in the mshr
@@ -2192,6 +2818,25 @@ void memory_c::flush_prefetch(int core_id) {
     }
   }
 }
+
+#if defined(LLC_PIM) && !defined(DB_SKIP)
+void memory_c::flush_prefetch_llc(int core_id) {
+  list<mem_req_s*> done_list;
+  for (auto I = m_mshr_llc[core_id].begin(), E = m_mshr_llc[core_id].end(); I != E;
+       ++I) {
+    if ((*I)->m_type == MRT_DPRF && (*I)->m_merge_llc.empty()) {
+      done_list.push_back((*I));
+    }
+  }
+
+  for (auto I = done_list.begin(), E = done_list.end(); I != E; ++I) {
+    if ((*I)->m_queue != NULL) {
+      (*I)->m_queue->pop((*I));
+      free_req_llc(core_id, (*I));
+    }
+  }
+}
+#endif
 
 void memory_c::handle_coherence(int level, bool hit, bool store, Addr addr,
                                 dcu_c* cache) {

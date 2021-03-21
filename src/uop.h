@@ -692,6 +692,8 @@ public:
   // changed by Joonho
   bool m_pim_region;
   bool m_avx_type;
+
+  // offload to LLC if p_pim_region && m_avx_type
   bool m_req_pim_int_reg; /**< need integer register */
   bool m_req_pim_fp_reg; /**< need fp register */
   bool m_req_pim_lb; /**< need integer register */

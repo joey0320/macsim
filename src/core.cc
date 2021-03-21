@@ -590,6 +590,11 @@ void core_c::check_forward_progress() {
       DRAM_CTRL[ii]->print_req();
     }
 
+    cout << "ROB INFO" << endl;
+    m_rob->print_rob_info();
+    cout << endl;
+  
+
     // print all remaining uop states
     if (*KNOB(KNOB_BUG_DETECTOR_ENABLE)) {
       m_simBase->m_bug_detector->print(m_core_id, m_last_terminated_tid);
@@ -598,8 +603,8 @@ void core_c::check_forward_progress() {
 
     m_simBase->m_network->print();
 
-    assert(m_core_cycle_count - m_last_forward_progress <= 
-        *KNOB(KNOB_FORWARD_PROGRESS_LIMIT)); 
+    assert(m_core_cycle_count - m_last_forward_progress <=
+        *KNOB(KNOB_FORWARD_PROGRESS_LIMIT));
     ASSERTM(m_core_cycle_count - m_last_forward_progress <=
               *KNOB(KNOB_FORWARD_PROGRESS_LIMIT),
             "core_id:%d core_cycle_count:%llu (%llu) "

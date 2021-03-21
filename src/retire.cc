@@ -178,7 +178,6 @@ void retire_c::run_a_cycle() {
 
         insert_wb(cur_uop);
       }
-
       // uop cannot be retired
       else if (!cur_uop->m_done_cycle || !cur_uop->m_exec_cycle ||
                cur_uop->m_done_cycle > m_cur_core_cycle) {

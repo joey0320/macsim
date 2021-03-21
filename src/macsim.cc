@@ -911,7 +911,7 @@ int macsim_c::run_a_cycle() {
     GET_NEXT_CYCLE(CLOCK_NOC);
   }
 
-  // run memory system
+  // run memory system (uncore)
   if (m_clock_internal == m_domain_next[CLOCK_LLC]) {
     m_memory->run_a_cycle(pll_locked);
     GET_NEXT_CYCLE(CLOCK_LLC);
@@ -948,6 +948,7 @@ int macsim_c::run_a_cycle() {
     m_core_cycle[ii]++;
 
 #ifndef USING_SST
+    // run a cycle of core memory (L1, L2)
     m_memory->run_a_cycle_core(ii, pll_locked);
 #endif
 
