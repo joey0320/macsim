@@ -148,7 +148,7 @@ protected:
    *  \param sched_fail_reason - Reason of uop schedule failure
    *  \return bool - True on success in scheduling
    */
-  virtual bool uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason);
+  virtual int uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason);
 
   /*! \fn void advance(int ALLOCQ_index)
    *  \brief Function to move the allocation queue ahead.

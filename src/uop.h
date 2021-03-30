@@ -54,6 +54,7 @@ typedef enum Iaq_Type_enum {
   simd_ALLOCQ,
   pim_mem_ALLOCQ,
   pim_fp_ALLOCQ,
+  pim_int_ALLOCQ,
   max_ALLOCQ
 } ALLOCQ_Type;
 
@@ -599,6 +600,8 @@ public:
    */
   void allocate();
 
+  bool check_src_matching(); 
+
   static const char
     *g_mem_type_name[NUM_MEM_TYPES]; /**< uop memory type string */
   static const char *g_uop_state_name[NUM_OP_STATES]; /**< uop state string */
@@ -696,6 +699,12 @@ public:
   bool m_req_pim_fp_reg; /**< need fp register */
   bool m_req_pim_lb; /**< need integer register */
   bool m_req_pim_sb; /**< need fp register */
+
+/* bool m_bw_save_recorded; */
+  bool m_pim_alu_src; /**< is source uop of pim alu uop */
+  bool m_pim_offloaded; /**< is is offloaded to llc */
+
+  uop_c *m_uop_src_pair;
 
 private:
   macsim_c *m_simBase; /**< macsim_c base class for simulation globals */

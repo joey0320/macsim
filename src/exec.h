@@ -193,6 +193,9 @@ private:
   int m_port_used[max_ALLOCQ]; /**< number of currently used port */
   bool* m_bank_busy; /**< indicate dcache bank busy */
 
+  //added by Joonho
+  set<int> m_bw_save_checked;
+
   macsim_c* m_simBase; /**< macsim_c base class for simulation globals */
 
 #ifdef USING_SST

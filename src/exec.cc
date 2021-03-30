@@ -328,8 +328,8 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
 #ifdef USING_SST
               uop_latency = access_data_cache(uop);
 #else  // USING_SST
-            if (uop->m_pim_region && uop->m_avx_type) { // ld to LLC
-              uop_latency = MEMORY->access(uop);
+            if (uop->m_pim_alu_src && uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) { // ld to LLC
+              uop_latency = 1;
             } else {
               uop_latency = MEMORY->access(uop);
             }
@@ -448,8 +448,9 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
 #ifdef USING_SST
                 latency = access_data_cache(uop->m_child_uops[next_set_bit]);
 #else  // USING_SST
-              if (uop->m_pim_region && uop->m_avx_type) { // ld to LLC
-                latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
+/* if (uop->m_pim_region && uop->m_avx_type) { // ld to LLC */
+            if (uop->m_pim_alu_src && uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) { // ld to LLC
+                latency = 1;
               } else {
                 latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
               }
@@ -575,7 +576,112 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
   // non-memory (compute) instructions
   else {
     uop_latency = get_latency(uop_type);
-    use_port(thread_id, entry);
+    if (!uop->m_pim_offloaded || !KNOB(KNOB_LLC_OFFLOAD)->getValue())
+      use_port(thread_id, entry);
+
+    // TODO : slice id?? what should we do about bogus??
+#if 0
+    if (KNOB(KNOB_LLC_PIM)->getValue()) {
+      int prev_slice_id = -1;
+      int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
+      bool diff_slice = false;
+
+/* if (uop->m_pim_region && uop->m_avx_type && uop->m_num_srcs >= 2) { */
+/* if (uop->m_pim_region && uop->m_avx_type) { */
+      if (uop->m_pim_region && uop->m_uop_type == UOP_IADD
+          && uop->m_num_srcs == 2) {
+        int core_id = uop->m_core_id;
+        int appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(uop->m_thread_id);
+        int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
+        int prev_slice_id = -1;
+        int ld_type_src = 0;
+        bool llc_miss = false;
+        bool diff_slice = false;
+
+        ASSERT(uop->m_srcs_rdy);
+
+        for (int ii = 0; ii < uop->m_num_srcs; ii++) {
+          uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
+          Addr addr = src_uop->m_paddr;
+          Mem_Type type = src_uop->m_mem_type;
+          Counter src_uop_num = uop->m_map_src_info[ii].m_uop_num;
+
+          if (!src_uop || !src_uop->m_valid || 
+              (src_uop->m_uop_num != src_uop_num) ||
+              (src_uop->m_thread_id != uop->m_thread_id))
+              continue;
+
+          Addr line_addr;
+          int slice_id;
+
+          if (type == MEM_LD) {
+            assert(src_uop);
+            assert(src_uop->m_pim_alu_src);
+            assert(src_uop->m_done_cycle != 0 &&
+                src_uop->m_done_cycle <= m_cur_core_cycle);
+            assert(src_uop->m_translated == KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue());
+            ld_type_src++;
+
+            if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+              slice_id = llc_hash(addr) % num_llc;
+
+              if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+                  src_uop->m_pim_alu_src)
+                slice_id = 0;
+            } else {
+              Addr b_addr = MEMORY->m_llc_cache[0]->base_addr(addr);
+              slice_id = BANK(b_addr, num_llc, MEMORY->m_llc_interleave_factor);
+              if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+                  src_uop->m_avx_type)
+                slice_id = 0;
+            }
+
+
+            switch(slice_id) {
+              case 0:
+                STAT_EVENT(SLICE_0);
+                break;
+              case 1:
+                STAT_EVENT(SLICE_1);
+                break;
+              case 2:
+                STAT_EVENT(SLICE_2);
+                break;
+              case 3:
+                STAT_EVENT(SLICE_3);
+                break;
+              default:
+                ASSERT(0);
+                break;
+            }
+
+            // check if src operands are in the same slice
+            if (prev_slice_id == -1) {
+              prev_slice_id = slice_id;
+            } else if (prev_slice_id != slice_id) {
+              diff_slice = true;
+            }
+
+            // check if the src operands has not been evicted
+            dcu_c *llc = MEMORY->m_llc_cache[slice_id];
+            line_addr = llc->base_addr(addr);
+            dcache_data_s *line3 = llc->access_cache(addr, &line_addr, false, appl_id);
+
+            if (!line3)
+              llc_miss = true;
+          }
+        }
+        if (uop->m_num_srcs == ld_type_src) {
+          if (llc_miss) 
+            STAT_EVENT(LLC_SRC_CACHE_MISS);
+          else if (diff_slice)
+            STAT_EVENT(LLC_SRC_HET_SLICE);
+          else
+            STAT_EVENT(LLC_SRC_UNI_SLICE);
+        }
+      }
+    }
+#endif
 
     switch (uop_type) {
       case UOP_FCF:
@@ -653,7 +759,6 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
     }
   }
   POWER_CORE_EVENT(m_core_id, POWER_EXEC_BYPASS);
-
 
   // set scheduling cycle
   uop->m_sched_cycle = m_cur_core_cycle;

@@ -43,6 +43,13 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "map.h"
 #include "core.h"
 
+#include "memory.h"
+#include "statistics.h"
+
+
+
+#define MEMORY m_simBase->m_memory
+
 // uop memory type string
 const char *uop_c::g_mem_type_name[NUM_MEM_TYPES] = {
   "NOT",   "LD",         "ST",        "PF",        "WH",
@@ -477,6 +484,11 @@ void uop_c::init() {
   m_req_pim_fp_reg = false;
   m_req_pim_lb = false;
   m_req_pim_sb = false;
+/* m_bw_save_recorded = false; */
+  m_pim_alu_src = false;
+  m_pim_offloaded = false;
+
+  m_uop_src_pair = NULL;
 }
 
 // initialize a new uop
@@ -502,5 +514,90 @@ uop_c *uop_c::free() {
   m_bypass_llc = false;
   m_skip_llc = false;
 
+  m_pim_region = false;
+  m_avx_type = false;
+  m_req_pim_int_reg = false;
+  m_req_pim_fp_reg = false;
+  m_req_pim_lb = false;
+  m_req_pim_sb = false;
+
+  m_pim_alu_src = false;
+  m_pim_offloaded = false;
+
+  m_uop_src_pair = NULL;
+
   return this;
+}
+
+bool uop_c::check_src_matching() {
+  int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
+  int slice_id = 0;
+  int slice_id_pair = 0;
+
+  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+    slice_id = llc_hash(m_vaddr) % num_llc;
+
+    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+        m_pim_alu_src)
+      slice_id = 0;
+  } else {
+    assert(0);
+  }
+
+  if (!m_uop_src_pair)
+    return false;
+
+  if (m_pim_alu_src) {
+    assert(m_uop_src_pair->m_pim_alu_src);
+    if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+      slice_id_pair = llc_hash(m_uop_src_pair->m_vaddr) % num_llc;
+      if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+          m_uop_src_pair->m_pim_alu_src)
+        slice_id_pair  = 0;
+    } else {
+      assert(0);
+    }
+  }
+  
+  if (slice_id != slice_id_pair) {
+    STAT_EVENT(LLC_SRC_HET_SLICE);
+    return false;
+  }
+
+  int appl_id = m_simBase->m_core_pointers[m_core_id]->get_appl_id(m_thread_id);
+  dcu_c *llc = MEMORY->m_llc_cache[slice_id];
+  Addr line_addr = llc->base_addr(m_vaddr);
+  dcache_data_s *cache_line = llc->access_cache(m_vaddr, &line_addr, false, appl_id);
+
+  dcu_c *llc_pair = MEMORY->m_llc_cache[slice_id_pair];
+  Addr line_addr_pair = llc_pair->base_addr(m_uop_src_pair->m_vaddr);
+  dcache_data_s *cache_line_pair = llc_pair->access_cache(m_uop_src_pair->m_vaddr, &line_addr_pair, false, appl_id);
+
+  if (!cache_line || !cache_line_pair) {
+    STAT_EVENT(LLC_SRC_CACHE_MISS);
+    return false;
+  }
+
+  m_pim_offloaded = true;
+  m_uop_src_pair->m_pim_offloaded = true;
+
+  switch(slice_id) {
+    case 0:
+      STAT_EVENT(SLICE_0);
+      break;
+    case 1:
+      STAT_EVENT(SLICE_1);
+      break;
+    case 2:
+      STAT_EVENT(SLICE_2);
+      break;
+    case 3:
+      STAT_EVENT(SLICE_3);
+      break;
+    default:
+      ASSERT(0);
+      break;
+  }
+
+  return true;
 }

@@ -40,6 +40,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "exec.h"
 #include "core.h"
 #include "statistics.h"
+#include "memory.h"
 
 #include "config.h"
 
@@ -53,6 +54,7 @@ POSSIBILITY OF SUCH DAMAGE.
   if (m_core_id == *m_simBase->m_knobs->KNOB_DEBUG_CORE_ID) {       \
     _DEBUG(*m_simBase->m_knobs->KNOB_DEBUG_SCHEDULE_STAGE, ##args); \
   }
+#define MEMORY m_simBase->m_memory
 
 // schedule_c constructor
 schedule_c::schedule_c(exec_c* exec, int core_id, Unit_Type unit_type,
@@ -172,7 +174,7 @@ bool schedule_c::check_srcs(int entry) {
 //  -> iterates over sched_list & exec ready uops
 //  -> if uop_schedule fails, it stays in the sched_list
 // call exec_c::exec function for uop execution
-bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
+int schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
   uop_c* cur_uop = (*m_rob)[entry];
   int q_num = cur_uop->m_allocq_num;
   bool bogus = cur_uop->m_bogus;
@@ -197,7 +199,7 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
     if ((cur_uop->m_uop_type == UOP_SIMD) &&
         (m_last_sched_cycle == m_cur_core_cycle - 1)) {
       *sched_fail_reason = SCHED_FAIL_NO_AVAILABLE_SIMD_UNIT;
-      return false;
+      return 0;
     }
   }
 
@@ -208,40 +210,142 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
 /* return false; */
 /* } */
 
+  bool offload_inst = false;
   if (!bogus) {
-    // check whether source registers are ready
-    if (!check_srcs(entry)) {
-      *sched_fail_reason = SCHED_FAIL_OPERANDS_NOT_READY;
-      DEBUG_CORE(
-        m_core_id,
-        "m_core_id:%d thread_id:%d uop_num:%lld operands are not ready \n",
-        m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
-      return false;
+    if (KNOB(KNOB_LLC_PIM)->getValue()) {
+      if (cur_uop->m_pim_region &&
+          cur_uop->m_uop_type == UOP_IADD &&
+          cur_uop->m_num_srcs == 2) { 
+
+        uop_c *src0 = cur_uop->m_map_src_info[0].m_uop;
+        uop_c *src1 = cur_uop->m_map_src_info[1].m_uop;
+/* if (src0->m_mem_type == MEM_LD && src1->m_mem_type == MEM_LD) { */
+/* int core_id = cur_uop->m_core_id; */
+/* int appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(cur_uop->m_thread_id); */
+/* int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC; */
+/* int prev_slice_id = -1; */
+/* int ld_type_src = 0; */
+/* bool llc_miss = false; */
+/* bool diff_slice = false; */
+
+/* for (int ii = 0; ii < cur_uop->m_num_srcs; ii++) { */
+/* uop_c *src_uop = cur_uop->m_map_src_info[ii].m_uop; */
+/* Addr addr = src_uop->m_vaddr; */
+/* Mem_Type type = src_uop->m_mem_type; */
+/* Counter src_uop_num = cur_uop->m_map_src_info[ii].m_uop_num; */
+
+/* if (!src_uop || !src_uop->m_valid || */
+/* (src_uop->m_uop_num != src_uop_num) || */
+/* (src_uop->m_thread_id != cur_uop->m_thread_id)) */
+/* continue; */
+
+/* Addr line_addr; */
+/* int slice_id; */
+
+/* if (type == MEM_LD) { */
+/* assert(src_uop); */
+/* assert(src_uop->m_pim_alu_src); */
+/* assert(src_uop->m_translated == KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue()); */
+/* ld_type_src++; */
+
+/* if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) { */
+/* slice_id = llc_hash(addr) % num_llc; */
+
+/* if (KNOB(KNOB_LLC_HASH_BIT)->getValue() && */
+/* src_uop->m_pim_alu_src) */
+/* slice_id = 0; */
+/* } else { */
+/* assert(0); */
+/* } */
+
+/* switch(slice_id) { */
+/* case 0: */
+/* STAT_EVENT(SLICE_0); */
+/* break; */
+/* case 1: */
+/* STAT_EVENT(SLICE_1); */
+/* break; */
+/* case 2: */
+/* STAT_EVENT(SLICE_2); */
+/* break; */
+/* case 3: */
+/* STAT_EVENT(SLICE_3); */
+/* break; */
+/* default: */
+/* ASSERT(0); */
+/* break; */
+/* } */
+
+/* // check if src operands are in the same slice */
+/* if (prev_slice_id == -1) { */
+/* prev_slice_id = slice_id; */
+/* } else if (prev_slice_id != slice_id) { */
+/* diff_slice = true; */
+/* } */
+
+/* // check if the src operands has not been evicted */
+/* dcu_c *llc = MEMORY->m_llc_cache[slice_id]; */
+/* line_addr = llc->base_addr(addr); */
+/* dcache_data_s *line3 = llc->access_cache(addr, &line_addr, false, appl_id); */
+
+/* if (!line3) */
+/* llc_miss = true; */
+/* } */
+/* } */
+/* if (cur_uop->m_num_srcs == ld_type_src) { */
+/* if (llc_miss) */
+/* STAT_EVENT(LLC_SRC_CACHE_MISS); */
+/* else if (diff_slice) */
+/* STAT_EVENT(LLC_SRC_HET_SLICE); */
+/* else { */
+/* STAT_EVENT(LLC_SRC_UNI_SLICE); */
+/* offload_inst = true; */
+/* cur_uop->m_pim_offloaded = true; */
+/* } */
+/* } */
+/* } */
+      } else if (cur_uop->m_pim_alu_src && KNOB(KNOB_LLC_OFFLOAD)->getValue()){
+        if (cur_uop->check_src_matching()) {
+          offload_inst = true;
+        }
+      }
     }
 
-    // Check for port availability.
-    if (!m_exec->port_available(q_num)) {
-      *sched_fail_reason = SCHED_FAIL_NO_AVAILABLE_PORTS;
-      DEBUG_CORE(m_core_id,
-                 "core_id:%d thread_id:%d uop_num:%lld ports are not ready \n",
-                 m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
-      return false;
-    }
+    if (!offload_inst || !KNOB(KNOB_LLC_OFFLOAD)->getValue()) {
+      // check whether source registers are ready
+      if (!check_srcs(entry)) {
+        *sched_fail_reason = SCHED_FAIL_OPERANDS_NOT_READY;
+        DEBUG_CORE(
+            m_core_id,
+            "m_core_id:%d thread_id:%d uop_num:%lld operands are not ready \n",
+            m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
+        return 0;
+      }
 
-    // Check if fence is active
-    if (*KNOB(KNOB_FENCE_ENABLE) && cur_uop->m_mem_type != NOT_MEM &&
-        m_rob->ensure_mem_ordering(entry)) {
-      *sched_fail_reason = SCHED_FAIL_FENCE_ACTIVE;
-      STAT_CORE_EVENT(m_core_id, FENCE_WAITING);
-      STAT_CORE_EVENT(m_core_id, WB_ORDERING_STALL);
+      // Check for port availability.
+      if (!m_exec->port_available(q_num)) {
+        *sched_fail_reason = SCHED_FAIL_NO_AVAILABLE_PORTS;
+        DEBUG_CORE(m_core_id,
+            "core_id:%d thread_id:%d uop_num:%lld ports are not ready \n",
+            m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
+        return 0;
+      }
 
-      if (*KNOB(KNOB_FENCE_PREF_ENABLE)) m_exec->insert_fence_pref(cur_uop);
+      // Check if fence is active
+      if (*KNOB(KNOB_FENCE_ENABLE) && cur_uop->m_mem_type != NOT_MEM &&
+          m_rob->ensure_mem_ordering(entry)) {
+        *sched_fail_reason = SCHED_FAIL_FENCE_ACTIVE;
+        STAT_CORE_EVENT(m_core_id, FENCE_WAITING);
+        STAT_CORE_EVENT(m_core_id, WB_ORDERING_STALL);
 
-      // prefetch execution hack
-      DEBUG_CORE(m_core_id,
-                 "core_id:%d thread_id:%d uop_num:%lld fence is active \n",
-                 m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
-      return false;
+        if (*KNOB(KNOB_FENCE_PREF_ENABLE)) m_exec->insert_fence_pref(cur_uop);
+
+        // prefetch execution hack
+        DEBUG_CORE(m_core_id,
+            "core_id:%d thread_id:%d uop_num:%lld fence is active \n",
+            m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
+        return 0;
+      }
     }
   }
 
@@ -266,7 +370,7 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
       m_core_id,
       "m_core_id:%d thread_id:%d uop_num:%lld just cannot be m_executed\n",
       m_core_id, cur_uop->m_thread_id, cur_uop->m_uop_num);
-    return false;
+    return 0;
   }
 
   if (cur_uop->m_uop_type == UOP_SIMD) m_last_sched_cycle = m_cur_core_cycle;
@@ -319,6 +423,10 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
       ASSERT(m_num_per_sched[pim_fp_ALLOCQ] > 0);
       --m_num_per_sched[pim_fp_ALLOCQ];
       break;
+    case pim_int_ALLOCQ:
+      ASSERT(m_num_per_sched[pim_int_ALLOCQ] > 0);
+      --m_num_per_sched[pim_int_ALLOCQ];
+      break;
     default:
       printf("unknown allocq : %d\n", q_num);
       exit(EXIT_FAILURE);
@@ -340,8 +448,11 @@ bool schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
              m_num_per_sched[pim_mem_ALLOCQ], 
              m_num_per_sched[pim_fp_ALLOCQ], 
              cur_uop->m_done_cycle);
-
-  return true;
+  
+  if (!offload_inst)
+    return 1;
+  else
+    return 2;
 }
 
 // move uops from alloc queue to schedule queue

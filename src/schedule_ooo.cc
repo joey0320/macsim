@@ -87,14 +87,16 @@ void schedule_ooo_c::run_a_cycle(void) {
         SCHED_FAIL_TYPE sched_fail_reason;
 
         // schedule un uop
-        if (uop_schedule(m_schedule_list[i], &sched_fail_reason)) {
+        int ret = uop_schedule(m_schedule_list[i], &sched_fail_reason);
+        if (ret) {
           STAT_CORE_EVENT(m_core_id, SCHED_FAILED_REASON_SUCCESS);
           if (i == m_first_schlist_ptr) {
             m_first_schlist_ptr = (m_first_schlist_ptr + 1) % MAX_SCHED_SIZE;
           }
 
           m_schedule_list[i] = -1;
-          ++count;
+          if (ret == 1)
+            ++count;          
 
           // schedule enough uops, break it
           if (m_knob_sched_to_width && count >= m_knob_width) break;
