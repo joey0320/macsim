@@ -2431,10 +2431,12 @@ void memory_c::handle_coherence()
 llc_coupled_network_c::llc_coupled_network_c(macsim_c* simBase)
   : memory_c(simBase) {
   ASSERT(m_num_core == m_num_llc);
+  assert(m_num_core == m_num_l3);
   // NEXT_ID, PREV_ID, DONE, COUPLE_UP, COUPLE_DOWN, DISABLE, HAS_ROUTER
   for (int ii = 0; ii < m_num_core; ++ii) {
     m_l1_cache[ii]->init(ii, -1, false, false, true, false, false);
     m_l2_cache[ii]->init(ii, ii, true, true, true, false, true);
+    m_l3_cache[ii]->init(-1, -1, false, false, false, true, true);
     m_llc_cache[ii]->init(-1, ii, false, true, false, false, true);
   }
 
