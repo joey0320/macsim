@@ -157,6 +157,11 @@ protected:
    */
   virtual void advance(int ALLOCQ_index);
 
+  /* added by joonho
+   * check if the src operands are ld & in same llc slice & not evicted
+   */
+  virtual bool check_pair_matching(uop_c *uop);
+
 protected:
   static const int MAX_SCHED_SIZE = 8192; /**< maximum scheduler table size */
 

@@ -212,103 +212,15 @@ int schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
 
   bool offload_inst = false;
   if (!bogus) {
-    if (KNOB(KNOB_LLC_PIM)->getValue()) {
-      if (cur_uop->m_pim_region &&
-          cur_uop->m_uop_type == UOP_IADD &&
-          cur_uop->m_num_srcs == 2) { 
+    // Offload ld instructions
+    // don't need to do this for ALU operations : only a few hundred cycles are saved
+    if (KNOB(KNOB_LLC_STAT)->getValue() &&
+        cur_uop->m_pim_alu_src) {
 
-        uop_c *src0 = cur_uop->m_map_src_info[0].m_uop;
-        uop_c *src1 = cur_uop->m_map_src_info[1].m_uop;
-/* if (src0->m_mem_type == MEM_LD && src1->m_mem_type == MEM_LD) { */
-/* int core_id = cur_uop->m_core_id; */
-/* int appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(cur_uop->m_thread_id); */
-/* int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC; */
-/* int prev_slice_id = -1; */
-/* int ld_type_src = 0; */
-/* bool llc_miss = false; */
-/* bool diff_slice = false; */
-
-/* for (int ii = 0; ii < cur_uop->m_num_srcs; ii++) { */
-/* uop_c *src_uop = cur_uop->m_map_src_info[ii].m_uop; */
-/* Addr addr = src_uop->m_vaddr; */
-/* Mem_Type type = src_uop->m_mem_type; */
-/* Counter src_uop_num = cur_uop->m_map_src_info[ii].m_uop_num; */
-
-/* if (!src_uop || !src_uop->m_valid || */
-/* (src_uop->m_uop_num != src_uop_num) || */
-/* (src_uop->m_thread_id != cur_uop->m_thread_id)) */
-/* continue; */
-
-/* Addr line_addr; */
-/* int slice_id; */
-
-/* if (type == MEM_LD) { */
-/* assert(src_uop); */
-/* assert(src_uop->m_pim_alu_src); */
-/* assert(src_uop->m_translated == KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue()); */
-/* ld_type_src++; */
-
-/* if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) { */
-/* slice_id = llc_hash(addr) % num_llc; */
-
-/* if (KNOB(KNOB_LLC_HASH_BIT)->getValue() && */
-/* src_uop->m_pim_alu_src) */
-/* slice_id = 0; */
-/* } else { */
-/* assert(0); */
-/* } */
-
-/* switch(slice_id) { */
-/* case 0: */
-/* STAT_EVENT(SLICE_0); */
-/* break; */
-/* case 1: */
-/* STAT_EVENT(SLICE_1); */
-/* break; */
-/* case 2: */
-/* STAT_EVENT(SLICE_2); */
-/* break; */
-/* case 3: */
-/* STAT_EVENT(SLICE_3); */
-/* break; */
-/* default: */
-/* ASSERT(0); */
-/* break; */
-/* } */
-
-/* // check if src operands are in the same slice */
-/* if (prev_slice_id == -1) { */
-/* prev_slice_id = slice_id; */
-/* } else if (prev_slice_id != slice_id) { */
-/* diff_slice = true; */
-/* } */
-
-/* // check if the src operands has not been evicted */
-/* dcu_c *llc = MEMORY->m_llc_cache[slice_id]; */
-/* line_addr = llc->base_addr(addr); */
-/* dcache_data_s *line3 = llc->access_cache(addr, &line_addr, false, appl_id); */
-
-/* if (!line3) */
-/* llc_miss = true; */
-/* } */
-/* } */
-/* if (cur_uop->m_num_srcs == ld_type_src) { */
-/* if (llc_miss) */
-/* STAT_EVENT(LLC_SRC_CACHE_MISS); */
-/* else if (diff_slice) */
-/* STAT_EVENT(LLC_SRC_HET_SLICE); */
-/* else { */
-/* STAT_EVENT(LLC_SRC_UNI_SLICE); */
-/* offload_inst = true; */
-/* cur_uop->m_pim_offloaded = true; */
-/* } */
-/* } */
-/* } */
-      } else if (cur_uop->m_pim_alu_src && KNOB(KNOB_LLC_OFFLOAD)->getValue()){
-        if (cur_uop->check_src_matching()) {
-          offload_inst = true;
-        }
-      }
+      // check if cur_uop has pair uop that is also a src ld of a pim IADD operation
+      // also collect some stats about LLC
+      if (check_pair_matching(cur_uop))
+        offload_inst = true;
     }
 
     if (!offload_inst || !KNOB(KNOB_LLC_OFFLOAD)->getValue()) {
@@ -535,4 +447,89 @@ void schedule_c::advance(int q_index) {
     // update the element m_count for the corresponding sched queue
     m_num_per_sched[q_type] = m_num_per_sched[q_type] + 1;
   }
+}
+
+// only call for llc pim candidates for offloading
+bool schedule_c::check_pair_matching(uop_c *uop) {
+  assert(uop->m_pim_alu_src);
+
+  int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
+  int slice_id = 0;
+  int slice_id_pair = 0;
+
+  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+    slice_id = llc_hash(uop->m_vaddr) % num_llc;
+
+    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+        uop->m_pim_alu_src)
+      slice_id = m_core_id;
+  } else {
+    slice_id = m_core_id;
+  }
+
+  if (!uop->m_uop_src_pair)
+    return false;
+
+  uop_c *pair = uop->m_uop_src_pair;
+  assert(pair->m_pim_alu_src);
+  assert(pair->m_uop_src_pair == uop);
+  assert(pair->m_mem_type == MEM_LD);
+  
+  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+    slice_id_pair = llc_hash(pair->m_vaddr) % num_llc;
+    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+        pair->m_pim_alu_src)
+      slice_id_pair  = pair->m_core_id;
+  } else {
+    slice_id_pair = pair->m_core_id;
+  }
+  
+  int core_id = uop->m_core_id;
+  int thread_id = uop->m_thread_id;
+  int appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(thread_id);
+  dcu_c *llc = MEMORY->m_llc_cache[slice_id];
+  Addr line_addr = llc->base_addr(uop->m_vaddr);
+  dcache_data_s *cache_line = llc->access_cache(uop->m_vaddr, &line_addr, false, appl_id);
+
+  assert(pair->m_thread_id == thread_id);
+  assert(pair->m_core_id == core_id);
+
+  dcu_c *llc_pair = MEMORY->m_llc_cache[slice_id_pair];
+  Addr line_addr_pair = llc_pair->base_addr(pair->m_vaddr);
+  dcache_data_s *cache_line_pair = llc_pair->access_cache(pair->m_vaddr, &line_addr_pair, false, appl_id);
+
+  if (!cache_line || !cache_line_pair) {
+    STAT_EVENT(LLC_SRC_MISSING);
+    return false;
+  }
+
+  if (slice_id != slice_id_pair) {
+    STAT_EVENT(LLC_SRC_HET_SLICE);
+    return false;
+  }
+
+  uop->m_pim_offloaded = true;
+  pair->m_pim_offloaded = true;
+
+  STAT_EVENT(LLC_SRC_OFFLOAD);
+
+  switch(slice_id) {
+    case 0:
+      STAT_EVENT(SLICE_0);
+      break;
+    case 1:
+      STAT_EVENT(SLICE_1);
+      break;
+    case 2:
+      STAT_EVENT(SLICE_2);
+      break;
+    case 3:
+      STAT_EVENT(SLICE_3);
+      break;
+    default:
+      ASSERT(0);
+      break;
+  }
+
+  return true;
 }
