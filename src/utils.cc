@@ -180,23 +180,6 @@ int get_num_set_bits64(uns64 val) {
   return count;
 }
 
-uns64 llc_hash(Addr addr) {
-  uns64 i0 = llc_first_hash0(addr);
-  uns64 i1 = llc_first_hash1(addr);
-  uns64 i2 = llc_first_hash2(addr);
-  uns64 i3 = llc_first_hash3(addr);
-  uns64 i4 = llc_first_hash4(addr);
-  uns64 i5 = llc_first_hash5(addr);
-  uns64 i6 = llc_first_hash6(addr);
-
-  uns64 s2 = (i0 ^ i5) & (i2 + i3 & (i4 | i5));
-  uns64 s1 = i1 & ~s2;
-  uns64 s0 = i0 ^ i1 ^ i2 ^ i3 ^ i4 ^ i5 ^ i6;
-
-  uns64 ret = s0 + 2*s1 + 4*s2;
-  return ret;
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // constructor
