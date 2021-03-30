@@ -183,18 +183,6 @@ void cache_c::find_tag_and_set(Addr addr, Addr *tag, int *set) {
   }
 }
 
-// TODO : modify pim cache block hashing scheme
-/* void cache_c::find_tag_and_set(Addr addr, Addr *tag, int *set, bool is_pim) { */
-/* if (!is_pim) { */
-/* find_tag_and_set(addr, tag, set); */
-/* } else { */
-/* // TODO : add tiles */
-/* assert(m_num_tiles == 1); */
-/* *tag = addr >> m_shift_bits & m_tag_mask; */
-/* *set = (addr >> m_shift_bits & m_set_mask) & (-N_BIT_MASK(log2_int(m_bank_num))); // 2s comp */
-/* } */
-/* } */
-
 // access the cache
 void *cache_c::access_cache(Addr addr, Addr *line_addr, bool update_repl,
                             int appl_id) {
