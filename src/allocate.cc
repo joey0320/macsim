@@ -142,6 +142,9 @@ void allocate_c::run_a_cycle(void) {
     } else if (uop->m_uop_type == UOP_IADD ||  
              uop->m_uop_type == UOP_IMUL || 
              uop->m_uop_type == UOP_ICMP) {      // integer register
+      if (uop->m_pim_region && uop->m_num_srcs >= 2)
+        req_pim_int_reg = 1;
+      else
         req_int_reg = 1;
     } else if (uop->m_uop_type == UOP_FCVT ||
              uop->m_uop_type == UOP_FADD) { 
@@ -167,6 +170,8 @@ void allocate_c::run_a_cycle(void) {
         q_type = *m_simBase->m_knobs->KNOB_MEM_ALLOCQ_INDEX;
       else if (req_pim_sb || req_pim_lb)
         q_type = *m_simBase->m_knobs->KNOB_PIM_MEM_ALLOCQ_INDEX;
+      else if (req_pim_int_reg)
+        q_type = *m_simBase->m_knobs->KNOB_PIM_INT_ALLOCQ_INDEX;
       else if (req_pim_fp_reg)
         q_type = *m_simBase->m_knobs->KNOB_PIM_FLOAT_ALLOCQ_INDEX;
       else
@@ -215,6 +220,9 @@ void allocate_c::run_a_cycle(void) {
     } else if (req_pim_fp_reg) {
       m_resource->alloc_pim_fp_reg();
       uop->m_req_pim_fp_reg = true;
+    } else if (req_pim_int_reg) {
+      m_resource->alloc_pim_int_reg();
+      uop->m_req_pim_int_reg = true;
     } else if (req_pim_lb) {
       m_resource->alloc_pim_lb();
       uop->m_req_pim_lb = true;
@@ -249,7 +257,9 @@ void allocate_c::run_a_cycle(void) {
                   ? simd_ALLOCQ
                 : (q_type == *m_simBase->m_knobs->KNOB_PIM_MEM_ALLOCQ_INDEX)
                     ? pim_mem_ALLOCQ
-                    : pim_fp_ALLOCQ;
+                    : (q_type == *m_simBase->m_knobs->KNOB_PIM_FLOAT_ALLOCQ_INDEX)
+                    ? pim_fp_ALLOCQ
+                    : pim_int_ALLOCQ;
     m_rob->push(uop);
 
     POWER_CORE_EVENT(m_core_id, POWER_REORDER_BUF_W);
