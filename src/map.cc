@@ -163,8 +163,7 @@ void map_c::add_src_from_map_entry(uop_c *uop, int src_num,
 
   // changed by Joonho
   // mark the src uop that the current uop depends on
-/* if (uop->m_pim_region && */
-/* uop->m_avx_type) { */
+  // we still have to check if both src_uop are m_pim_alu_src
   if (uop->m_pim_region && 
       uop->m_uop_type == UOP_IADD &&
       uop->m_num_srcs == 2) {
