@@ -600,8 +600,6 @@ public:
    */
   void allocate();
 
-  bool check_src_matching(); 
-
   static const char
     *g_mem_type_name[NUM_MEM_TYPES]; /**< uop memory type string */
   static const char *g_uop_state_name[NUM_OP_STATES]; /**< uop state string */
