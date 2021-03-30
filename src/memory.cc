@@ -128,7 +128,16 @@ bool dcache_fill_line_wrapper(mem_req_s* req) {
   // process merged requests
   for (auto I = done_list.begin(), E = done_list.end(); I != E; ++I) {
     req->m_merge.remove((*I));
-    req->m_simBase->m_memory->free_req((*I)->m_core_id, (*I));
+
+    if ((*I)->KNOB(KNOB_LLC_LD)->getValue()) {
+      uop_c *uop = req->m_uop;
+      if (uop && uop->m_pim_region && uop->m_avx_type)
+        free(req);
+      else
+        req->m_simBase->m_memory->free_req((*I)->m_core_id, (*I));
+    } else {
+      req->m_simBase->m_memory->free_req((*I)->m_core_id, (*I));
+    }
   }
 
   // process the request
@@ -409,11 +418,15 @@ mem_req_s* dcu_c::search_pref_in_queue() {
 // DCACHE (L1) access from the pipeline stage
 // If miss in the cache, it will go thru the memory system.
 int dcu_c::access(uop_c* uop) {
-  ASSERT(m_level == MEM_L1);
+  if (!KNOB(KNOB_LLC_LD)->getValue()) {
+    ASSERT(m_level == MEM_L1);
+  } else {
+    ASSERT(m_level == MEM_L1 || m_level == MEM_LLC);
+  }
   DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld access\n", m_level, m_id,
              uop->m_uop_num);
-
-  if (*m_simBase->m_knobs->KNOB_ENABLE_PHYSICAL_MAPPING) {
+  
+  if (m_level == MEM_L1 && *m_simBase->m_knobs->KNOB_ENABLE_PHYSICAL_MAPPING) {
     bool success = m_simBase->m_MMU->translate(uop);
     if (!success) return -1;  // treat a TLB miss as a longer latency cache miss
   } else
@@ -480,12 +493,15 @@ int dcu_c::access(uop_c* uop) {
   if (cache_hit) {
     if (m_level != MEM_LLC) {
       POWER_CORE_EVENT(uop->m_core_id, POWER_DCACHE_R + (m_level - 1));
+      STAT_EVENT(L1_HIT_CPU + this->m_acc_sim);
+      DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache hit\n", m_level,
+          m_id, uop->m_uop_num);
     } else {
       POWER_EVENT(POWER_LLC_R);
+      STAT_EVENT(LLC_HIT_CPU + this->m_acc_sim);
+      DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache hit\n", m_level,
+          m_id, uop->m_uop_num);
     }
-    STAT_EVENT(L1_HIT_CPU + this->m_acc_sim);
-    DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache hit\n", m_level,
-               m_id, uop->m_uop_num);
     // stat
     uop->m_uop_info.m_dcmiss = false;
 
@@ -494,8 +510,10 @@ int dcu_c::access(uop_c* uop) {
     // -------------------------------------
     // hardware prefetcher training
     // -------------------------------------
-    m_simBase->m_core_pointers[uop->m_core_id]->train_hw_pref(
-      MEM_L1, uop->m_thread_id, line_addr, uop->m_pc, uop, true);
+    if (m_level == MEM_L1) {
+      m_simBase->m_core_pointers[uop->m_core_id]->train_hw_pref(
+          MEM_L1, uop->m_thread_id, line_addr, uop->m_pc, uop, true);
+    }
 
     if (*m_simBase->m_knobs->KNOB_ENABLE_CACHE_COHERENCE) {
     }
@@ -538,16 +556,22 @@ int dcu_c::access(uop_c* uop) {
   // DCACHE miss
   // -------------------------------------
   else {  // !cache_hit
-    STAT_EVENT(L1_MISS_CPU + this->m_acc_sim);
-    DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache miss\n", m_level,
-               m_id, uop->m_uop_num);
+    if (m_level == MEM_L1) {
+      STAT_EVENT(L1_MISS_CPU + this->m_acc_sim);
+      DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache miss\n", m_level,
+          m_id, uop->m_uop_num);
 
     // -------------------------------------
     // hardware prefetcher training
     // -------------------------------------
-    if (!m_disable) {
-      m_simBase->m_core_pointers[uop->m_core_id]->train_hw_pref(
-        MEM_L1, uop->m_thread_id, line_addr, uop->m_pc, uop, false);
+      if (!m_disable) {
+        m_simBase->m_core_pointers[uop->m_core_id]->train_hw_pref(
+            MEM_L1, uop->m_thread_id, line_addr, uop->m_pc, uop, false);
+      }
+    } else {
+      STAT_EVENT(LLC_MISS_CPU + this->m_acc_sim);
+      DEBUG_CORE(uop->m_core_id, "L%d[%d] uop_num:%lld cache miss\n", m_level,
+          m_id, uop->m_uop_num);
     }
 
     // stat
@@ -589,7 +613,6 @@ int dcu_c::access(uop_c* uop) {
     } else {
       req_size = m_line_size;
       req_addr = line_addr;
-
     }
 
     // FIXME (jaekyu, 10-26-2011)
@@ -613,24 +636,35 @@ int dcu_c::access(uop_c* uop) {
       done_func = dcache_fill_line_wrapper;
     }
 
-    int result;
-    result = m_simBase->m_memory->new_mem_req(
-      req_type, req_addr, req_size, cache_hit,
-      (type == MEM_ST_GM || type == MEM_ST_LM), m_latency, uop, done_func,
-      uop->m_unique_num, NULL, m_id, uop->m_thread_id, m_acc_sim);
+    if (m_level == MEM_L1) {
+      int result;
+      result = m_simBase->m_memory->new_mem_req(
+          req_type, req_addr, req_size, cache_hit,
+          (type == MEM_ST_GM || type == MEM_ST_LM), m_latency, uop, done_func,
+          uop->m_unique_num, NULL, m_id, uop->m_thread_id, m_acc_sim);
 
-    // -------------------------------------
-    // MSHR full
-    // -------------------------------------
-    if (!result) {
-      uop->m_state = OS_DCACHE_MEM_ACCESS_DENIED;
-      return 0;
-    }
-    // -------------------------------------
-    // In case of software prefetch, generate pref request and retire the instruction
-    // -------------------------------------
-    else if (req_type == MRT_DPRF) {
-      return m_latency;
+      // -------------------------------------
+      // MSHR full
+      // -------------------------------------
+      if (!result) {
+        uop->m_state = OS_DCACHE_MEM_ACCESS_DENIED;
+        return 0;
+      }
+      // -------------------------------------
+      // In case of software prefetch, generate pref request and retire the instruction
+      // -------------------------------------
+      else if (req_type == MRT_DPRF) {
+        return m_latency;
+      }
+    } else { // m_level == MEM_LLC
+      Counter priority = g_mem_priority[type];
+      mem_req_s *new_req = new mem_req_s(m_simBase);
+      m_memory->init_new_req(new_req, req_type, req_addr, req_size, false, m_latency,
+          uop, done_func, uop->m_unique_num, priority, uop->m_core_id, uop->m_thread_id, false);
+
+      this->insert(new_req);
+
+      return -1;
     }
   }  // !cache_hit
 
@@ -720,6 +754,9 @@ void dcu_c::process_in_queue() {
   int count = 0;
   for (auto I = m_in_queue->m_entry.begin(), E = m_in_queue->m_entry.end();
        I != E; ++I) {
+
+    // Joonho : Why are we allowing 4 read accesses
+    // in a single cycle???
     if (count == 4) break;
 
     mem_req_s* req = (*I);
@@ -764,9 +801,19 @@ void dcu_c::process_in_queue() {
     // Cache hit
     // -------------------------------------
     if (cache_hit) {
+  
+      if (m_level == MEM_LLC && 
+          req->m_type == MRT_DFETCH && 
+          count == 0)
+        STAT_EVENT(LLC_READ_BW_UP);
+
+      if (m_level == MEM_LLC &&
+          req->m_type == MRT_DSTORE)
+        STAT_EVENT(LLC_WRITE_BW_UP);
+
       if (m_level != MEM_LLC) {
         POWER_CORE_EVENT(req->m_core_id, POWER_DCACHE_R + (m_level - 1));
-      } else {
+      } else { // if level == llc
         POWER_EVENT(POWER_LLC_R);
       }
 
@@ -904,7 +951,14 @@ void dcu_c::process_in_queue() {
           req->m_type == MRT_DSTORE) {
         m_simBase->m_memory->free_write_req(req);
       } else {
-        m_simBase->m_memory->free_req(req->m_core_id, req);
+        if (KNOB(KNOB_LLC_LD)->getValue()) {
+          uop_c *uop = req->m_uop;
+          if (uop && uop->m_pim_region && uop->m_avx_type)
+            free(req);
+          else 
+            m_simBase->m_memory->free_req(req->m_core_id, req);
+        } else 
+          m_simBase->m_memory->free_req(req->m_core_id, req);
       }
     }
   }
@@ -1331,7 +1385,14 @@ void dcu_c::process_fill_queue() {
           req->m_type == MRT_DSTORE) {
         m_simBase->m_memory->free_write_req(req);
       } else {
-        m_memory->free_req(req->m_core_id, req);
+        if (KNOB(KNOB_LLC_LD)->getValue()) {
+          uop_c *uop = req->m_uop;
+          if (uop && uop->m_pim_region && uop->m_avx_type)
+            free(req);
+          else 
+            m_simBase->m_memory->free_req(req->m_core_id, req);
+        } else 
+          m_simBase->m_memory->free_req(req->m_core_id, req);
       }
     }
   }
@@ -1384,6 +1445,9 @@ void dcu_c::process_wb_queue() {
                  "L%d[%d] req:%d type:%s send to busout queue\n", m_level, m_id,
                  req->m_id, mem_req_c::mem_req_type_name[req->m_type]);
       req->m_state = MEM_OUT_WB;
+
+      if (m_level == MEM_LLC) 
+        STAT_EVENT_N(LLC_READ_BW_DW, 64);
     }
 
     done_list.push_back(req);
@@ -1978,13 +2042,27 @@ void memory_c::set_cache_id(mem_req_s* req) {
   req->m_cache_id[MEM_L2] = req->m_core_id;
   req->m_cache_id[MEM_L3] = BANK(req->m_addr, m_num_l3, m_l3_interleave_factor);
   
-  // TODO change here : for LLC hashing
-#ifdef LLC_HASHING
-  req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
-#else
-  req->m_cache_id[MEM_LLC] =
-  BANK(req->m_addr, m_num_llc, m_llc_interleave_factor);
-#endif
+  uop_c *uop  = req->m_uop;
+
+  // LLC HASH enabled
+  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+    if (uop) {
+      req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
+      // pim bit enabled
+      if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+          uop->m_pim_alu_src)
+        req->m_cache_id[MEM_LLC] = 0;
+      // pim bit disabled
+    } else {
+      //FIXME : Joonho
+      req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
+    }
+  // LLC HASH disabled
+  } else {
+    req->m_cache_id[MEM_LLC] = BANK(req->m_addr, m_num_llc, m_llc_interleave_factor);
+    if (KNOB(KNOB_LLC_HASH_BIT)->getValue()) 
+      req->m_cache_id[MEM_LLC] = 0;
+  }
 
   req->m_cache_id[MEM_MC] =
     BANK(req->m_addr, m_num_mc, *KNOB(KNOB_DRAM_INTERLEAVE_FACTOR));
@@ -2028,7 +2106,47 @@ int memory_c::get_num_avail_entry(int core_id) {
 
 // access L1 cache from execution stage
 int memory_c::access(uop_c* uop) {
-  return m_l1_cache[uop->m_core_id]->access(uop);
+
+  /* if a direct load to LLC is enabled */
+  if (KNOB(KNOB_LLC_LD)->getValue()) {
+    if (uop->m_pim_alu_src && uop->m_valid) { // offload to LLC
+      if (*m_simBase->m_knobs->KNOB_ENABLE_PHYSICAL_MAPPING) {
+        bool success = m_simBase->m_MMU->translate(uop);
+        if (!success) return -1;  // treat a TLB miss as a longer latency cache miss
+      } else {
+        uop->m_paddr = uop->m_vaddr;
+      }
+  
+      int llc_id;
+      // LLC hashing enabled
+      if (KNOB(KNOB_LLC_HASH_ENABLE)) {
+        // pim bit enabled
+        if (KNOB(KNOB_LLC_HASH_BIT)->getValue()) 
+          llc_id = 0;
+        // pim bit disabled
+        else
+          llc_id = llc_hash(uop->m_paddr) % m_num_llc;
+
+        assert(llc_id >= 0 && llc_id < m_num_llc);
+        return m_llc_cache[llc_id]->access(uop);
+      
+      // LLC hashing disabled
+      } else {
+        Addr b_addr = m_llc_cache[0]->base_addr(uop->m_paddr);
+        llc_id = BANK(b_addr, m_num_llc, m_llc_interleave_factor);
+
+        if (KNOB(KNOB_LLC_HASH_BIT)->getValue())
+          llc_id = 0;
+
+        return m_llc_cache[llc_id]->access(uop);
+      }
+    } else {
+      return m_l1_cache[uop->m_core_id]->access(uop);
+    }
+  /* Direct access to LLC disabled */
+  } else {
+    return m_l1_cache[uop->m_core_id]->access(uop);
+  }
 }
 
 Addr memory_c::base_addr(int core_id, Addr addr) {
@@ -2188,7 +2306,15 @@ void memory_c::flush_prefetch(int core_id) {
   for (auto I = done_list.begin(), E = done_list.end(); I != E; ++I) {
     if ((*I)->m_queue != NULL) {
       (*I)->m_queue->pop((*I));
-      free_req(core_id, (*I));
+      if (KNOB(KNOB_LLC_LD)->getValue()) {
+        uop_c *uop = (*I)->m_uop;
+        if (uop && uop->m_pim_region && uop->m_avx_type)
+          free(*I);
+        else
+          free_req(core_id, (*I));
+      } else {
+        free_req(core_id, (*I));
+      }
     }
   }
 }
@@ -2323,10 +2449,17 @@ llc_coupled_network_c::~llc_coupled_network_c() {
 llc_decoupled_network_c::llc_decoupled_network_c(macsim_c* simBase)
   : memory_c(simBase) {
   // NEXT_ID, PREV_ID, DONE, COUPLE_UP, COUPLE_DOWN, DISABLE, HAS_ROUTER
+#ifndef L1_DISABLE
   for (int ii = 0; ii < m_num_core; ++ii) {
     m_l1_cache[ii]->init(ii, -1, false, false, true, false, false);
     m_l2_cache[ii]->init(-1, ii, true, true, false, false, true);
   }
+#else
+  for (int ii = 0; ii < m_num_core; ++ii) {
+    m_l1_cache[ii]->init(ii, -1, false, false, true, true, false);
+    m_l2_cache[ii]->init(-1, ii, true, true, false, false, true);
+  }
+#endif
 
   for (int ii = 0; ii < m_num_l3; ++ii)
     m_l3_cache[ii]->init(-1, -1, false, false, false, true, true);

@@ -1129,7 +1129,7 @@ bool cpu_decoder_c::get_uops_from_traces(int core_id, uop_c *uop,
   uop->m_npc = trace_uop->m_npc;
   uop->m_active_mask = trace_uop->m_active_mask;
 
-  /// TODO
+  /// added by Joonho
   uop->m_pim_region = trace_uop->m_pim_region; 
   uop->m_avx_type = trace_uop->m_avx_type;
 

@@ -501,12 +501,6 @@ public:
 
   int* m_iris_node_id; /**< noc id for iris network nodes */
 
-protected:
-  /**
-   * Allocate a new request from free list
-   */
-  mem_req_s* allocate_new_entry(int core_id);
-
   /**
    * Initialize a new request
    */
@@ -514,6 +508,13 @@ protected:
                     bool with_data, int delay, uop_c* uop,
                     function<bool(mem_req_s*)> done_func, Counter unique_num,
                     Counter priority, int core_id, int thread_id, bool ptx);
+
+protected:
+  /**
+   * Allocate a new request from free list
+   */
+  mem_req_s* allocate_new_entry(int core_id);
+
 
   /**
    * Adjust a new request. In case of finding matching entry, we need to adjust
@@ -544,24 +545,28 @@ protected:
    */
   void flush_prefetch(int core_id);
 
-protected:
+  // I really don't want to do this
+  // But for the sake of simplicity
+public:
   dcu_c** m_l1_cache; /**< L1 caches */
   dcu_c** m_l2_cache; /**< L2 caches */
   dcu_c** m_l3_cache; /**< L3 caches */
   dcu_c** m_llc_cache; /**< LLC caches */
+  int m_num_llc; /**< number of LLC caches */
+  int m_llc_interleave_factor; /**< mask bit for LLC id */
+
+protected:
   list<mem_req_s*>* m_mshr; /**< mshr entry per L1 cache */
   list<mem_req_s*>* m_mshr_free_list; /**< mshr entry free list */
   int m_num_core; /**< number of cores */
   int m_num_cpu;
   int m_num_gpu;
   int m_num_l3; /**< number of L3 caches */
-  int m_num_llc; /**< number of LLC caches */
   int m_num_mc; /**< number of memory controllers */
   int m_noc_index_base[MEM_LAST]; /**< component id of each memory hierarchy */
   int m_noc_id_base[MEM_LAST]; /**< noc id base per level */
   Counter m_stop_prefetch; /**< when set, no prefetches will be inserted */
   int m_l3_interleave_factor; /**< mask bit for L3 id */
-  int m_llc_interleave_factor; /**< mask bit for LLC id */
   int m_dram_interleave_factor; /**< mask bit for dram id */
   macsim_c* m_simBase; /**< macsim_c base class for simulation globals */
   long m_page_size;

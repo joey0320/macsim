@@ -500,6 +500,7 @@ FRONTEND_MODE frontend_c::process_ifetch(unsigned int tid,
         if (!*m_simBase->m_knobs->KNOB_IGNORE_DEP) {
           m_map->map_uop(new_uop);
           m_map->map_mem_dep(new_uop);
+          m_map->pair_src_uops(new_uop);
 
           POWER_CORE_EVENT(m_core_id, POWER_DEP_CHECK_LOGIC_R);
         }
@@ -564,6 +565,9 @@ FRONTEND_MODE frontend_c::process_ifetch(unsigned int tid,
         // -------------------------------------
         send_uop_to_qfe(new_uop);
         ++fetched_uops;
+
+        if (new_uop->m_pim_region && new_uop->m_avx_type)
+          STAT_CORE_EVENT(m_core_id, PIM_UOP_READ_COUNT);
 
         // -------------------------------------
         // we fetch enough uops, stop fetching

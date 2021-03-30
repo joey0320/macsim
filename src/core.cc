@@ -198,6 +198,7 @@ core_c::core_c(int c_id, macsim_c* simBase, Unit_Type type) {
   // TODO : add knobs
   q_iaq_size[pim_mem_ALLOCQ] = miaq_size;
   q_iaq_size[pim_fp_ALLOCQ] = fq_size;
+  q_iaq_size[pim_int_ALLOCQ] = giaq_size;
 
   sstr.clear();
   if (m_core_type == "ptx" || m_core_type == "igpu") {
