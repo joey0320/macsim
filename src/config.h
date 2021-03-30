@@ -384,6 +384,7 @@ POSSIBILITY OF SUCH DAMAGE.
   m_max_port[fp_ALLOCQ] = fp_sched_rate;                                   \
   m_max_port[simd_ALLOCQ] = simd_sched_rate;                               \
   m_max_port[pim_fp_ALLOCQ] = fp_sched_rate;                               \
+  m_max_port[pim_int_ALLOCQ] = int_sched_rate;                               \
   m_max_port[pim_mem_ALLOCQ] = mem_sched_rate;                           \
 
 #define SCHED_CONFIG()                                                         \
@@ -443,12 +444,14 @@ POSSIBILITY OF SUCH DAMAGE.
   m_sched_size[simd_ALLOCQ] = simd_sched_size;                                 \
   m_sched_size[pim_mem_ALLOCQ] = mem_sched_size;                                   \
   m_sched_size[pim_fp_ALLOCQ] = fp_sched_size;                                     \
+  m_sched_size[pim_int_ALLOCQ] = int_sched_size;                                     \
   m_sched_rate[gen_ALLOCQ] = int_sched_rate;                                   \
   m_sched_rate[mem_ALLOCQ] = mem_sched_rate;                                   \
   m_sched_rate[fp_ALLOCQ] = fp_sched_rate;                                     \
   m_sched_rate[simd_ALLOCQ] = simd_sched_rate;                                 \
   m_sched_rate[pim_mem_ALLOCQ] = mem_sched_rate;                                   \
   m_sched_rate[pim_fp_ALLOCQ] = fp_sched_rate;                                     \
+  m_sched_rate[pim_int_ALLOCQ] = fp_sched_rate;                                     \
                                                                                \
   m_num_per_sched[gen_ALLOCQ] = 0;                                             \
   m_num_per_sched[mem_ALLOCQ] = 0;                                             \
@@ -456,6 +459,7 @@ POSSIBILITY OF SUCH DAMAGE.
   m_num_per_sched[simd_ALLOCQ] = 0;                                            \
   m_num_per_sched[pim_mem_ALLOCQ] = 0;                                             \
   m_num_per_sched[pim_fp_ALLOCQ] = 0;                                              \
+  m_num_per_sched[pim_int_ALLOCQ] = 0;                                              \
 
 
 #define FRONTEND_CONFIG()                                                      \
