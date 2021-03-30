@@ -72,15 +72,16 @@ large_core_schedule ooo
 max_threads_per_large_core 1
 icache_large_num_set 64 # 64 KB
 icache_large_assoc 8
+
 l1_large_num_set 64 # 32 KB L1 Cache
 l1_large_assoc 8
 l1_large_latency 3
 l1_large_bypass 0
+
 l2_large_num_set 256 # 128 KB L2 Cache
 l2_large_assoc 8
 l2_large_latency 8
 l2_large_bypass 0
-
 
 # Memory
 perfect_dcache 0
@@ -91,16 +92,31 @@ memory_type llc_decoupled_network
 byte_level_access 0
 infinite_port 0
 
+# NOC
+noc_topology mesh
+noc_dimension 2
 
 # LLC Cache
-num_llc 6
-llc_num_set 1024
+num_llc 4
+llc_num_set 2048
 llc_line_size 64
 llc_assoc 32
 llc_num_bank 8
 llc_latency 30 
 pref_framework_on 1
 enable_pref_small_core 0
+
+llc_pim 1               # for pim - stat collection
+llc_ld 0                # for memory.cc : load directly to llc
+llc_offload 0           # offload instructions ??
+llc_hash_enable 1
+llc_hash_bit 0
+
+#TLB : disable for now since we do not access TLB before checking offload
+enable_physical_mapping 0 
+
+# OUTPUT DIR
+out ../stats-out/pim/mesh/3/hb0-offld0-128k
 
 
 # DRAM
@@ -121,9 +137,10 @@ bug_detector_enable 1
 pim_int_regfile_size 32
 pim_fp_regfile_size 32
 
+
 # DEBUG
 debug_core_id 0
-debug_cycle_start 1
+debug_cycle_start 0
 debug_cycle_stop 0
 debug_front_stage 0
 debug_alloc_stage 0
@@ -139,5 +156,3 @@ debug_cache_lib 0
 debug_bp_dir 0
 
 
-# OUTPUT DIR
-out ../stats-out/pim/1
