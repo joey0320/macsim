@@ -138,6 +138,7 @@ void map_c::add_src_from_map_entry(uop_c *uop, int src_num,
       map_entry->m_uop->m_mem_type > 0)
     uop->m_dep_on_hmc_inst = true;
 
+
   DEBUG_CORE(uop->m_core_id,
              "core_id:%d thread_id:%d Added dep uop_num:%llu inst_num:%llu "
              "src_uop_num:%llu src_num:%d\n",
@@ -159,6 +160,18 @@ void map_c::add_src_from_map_entry(uop_c *uop, int src_num,
   info->m_uop = map_entry->m_uop;
   info->m_uop_num = map_entry->m_uop_num;
   info->m_unique_num = map_entry->m_unique_num;
+
+  // changed by Joonho
+  // mark the src uop that the current uop depends on
+/* if (uop->m_pim_region && */
+/* uop->m_avx_type) { */
+  if (uop->m_pim_region && 
+      uop->m_uop_type == UOP_IADD &&
+      uop->m_num_srcs == 2) {
+    uop_c *src_uop = info->m_uop;
+    if (src_uop->m_mem_type == MEM_LD)
+      src_uop->m_pim_alu_src = true;
+  }
 
   // set source bit not ready
   set_not_rdy_bit(uop, src_num);
@@ -197,7 +210,7 @@ void map_c::add_src_from_uop(uop_c *uop, uop_c *src_uop, Dep_Type type) {
             (uop->m_thread_id != -1 && src_uop->m_thread_id != -1) ||
             (uop->m_off_path && src_uop->m_thread_id != -1),
           "uop:%llu  src_uop:%llu\n", uop->m_uop_num, src_uop->m_uop_num);
-
+  
   info->m_type = type;
   info->m_uop = src_uop;
   info->m_uop_num = src_uop->m_uop_num;
@@ -513,4 +526,25 @@ void map_c::delete_store_hash_entry(uop_c *uop) {
 // wrapper function to delete store dependence information
 void delete_store_hash_entry_wrapper(map_c *map, uop_c *uop) {
   map->delete_store_hash_entry(uop);
+}
+
+void map_c::pair_src_uops(uop_c *uop) {
+  if (!uop->m_pim_region || uop->m_num_srcs != 2 || uop->m_uop_type != UOP_IADD) 
+    return;
+
+  bool ld_src = true;
+  
+  for (int ii = 0; ii < uop->m_num_srcs; ii++) {
+    uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
+    if (src_uop->m_mem_type != MEM_LD)
+      ld_src = false;
+  }
+
+  if (ld_src) {
+    for (int ii = 0; ii < uop->m_num_srcs; ii++) {
+      uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
+      assert(src_uop->m_pim_alu_src);
+      src_uop->m_uop_src_pair = uop->m_map_src_info[1 - ii].m_uop;
+    }
+  }
 }

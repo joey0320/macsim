@@ -184,6 +184,8 @@ public:
    */
   void delete_map(int);
 
+  void pair_src_uops(uop_c *uop); 
+
 public:
   hash_c<map_data_c> *m_core_map_data; /**< per thread dependence table */
 
