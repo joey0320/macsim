@@ -47,8 +47,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define MemType_Prefetch(x) (x >= MEM_SWPREF_NTA && x <= MEM_SWPREF_T2)
 #define MRT_Prefetch(x) (x >= MRT_SW_DPRF && x <= MRT_SW_DPRF_T2)
 
-// comment this to disable LLC hashing
-#define LLC_HASHING
+/* // comment this to disable LLC hashing */
+/* #define LLC_HASHING */
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -295,7 +295,7 @@ private:
   int m_next_id; /**< next-level cache id */
   dcu_c** m_next; /**< next-level cache pointer */
   int m_prev_id; /**< previous-level cache id */
-  dcu_c** m_prev; /**< previous-level ache pointer */
+  dcu_c** m_prev; /**< previous-level cache pointer */
   bool m_coupled_up; /**< directly connected to upward cache w/o NoC */
   bool m_coupled_down; /**< directly connected to downward cache w/o NoC */
   bool m_has_router; /**< has network router in this level */

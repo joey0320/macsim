@@ -600,6 +600,11 @@ public:
    */
   void allocate();
 
+
+  // Added by Joonho
+  int get_llc_slice_id();
+  bool check_cache(int slice_id, int level);
+
   static const char
     *g_mem_type_name[NUM_MEM_TYPES]; /**< uop memory type string */
   static const char *g_uop_state_name[NUM_OP_STATES]; /**< uop state string */

@@ -528,3 +528,51 @@ uop_c *uop_c::free() {
 
   return this;
 }
+
+int uop_c::get_llc_slice_id() {
+  assert(m_mem_type != NOT_MEM);
+  assert(!KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue());
+
+  int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
+  int slice_id = 0;
+
+  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+    slice_id = llc_hash(m_vaddr) % num_llc;
+
+    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
+        m_pim_alu_src)
+      slice_id = m_core_id;
+  } else {
+    slice_id = m_core_id;
+  }
+  return slice_id;
+}
+
+bool uop_c::check_cache(int slice_id, int level) {
+  assert(m_mem_type != NOT_MEM);
+  assert(!KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue());
+
+  if (level == MEM_L1 || level == MEM_L2) 
+    assert(slice_id == m_core_id);
+
+  int core_id = m_core_id;
+  int thread_id = m_thread_id;
+  int appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(thread_id);
+
+  dcu_c *cache;
+  if (level == MEM_L1) 
+    cache = MEMORY->m_l1_cache[core_id];
+  else if (level == MEM_L2)
+    cache = MEMORY->m_l2_cache[core_id];
+  else if (level == MEM_L3)
+    cache = MEMORY->m_l3_cache[slice_id];
+  else if (level == MEM_LLC)
+    cache = MEMORY->m_llc_cache[slice_id];
+  Addr line_addr = cache->base_addr(m_vaddr);
+  dcache_data_s *cache_line = cache->access_cache(m_vaddr, &line_addr, false, appl_id);
+
+  if (cache_line)
+    return true;
+  else
+    return false;
+}

@@ -2042,27 +2042,14 @@ void memory_c::set_cache_id(mem_req_s* req) {
   req->m_cache_id[MEM_L2] = req->m_core_id;
   req->m_cache_id[MEM_L3] = BANK(req->m_addr, m_num_l3, m_l3_interleave_factor);
   
+  int slice_id;
   uop_c *uop  = req->m_uop;
+  if (uop) 
+    slice_id = uop->get_llc_slice_id();
+  else
+    slice_id = llc_hash(req->m_addr) % m_num_llc;
 
-  // LLC HASH enabled
-  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
-    if (uop) {
-      req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
-      // pim bit enabled
-      if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
-          uop->m_pim_alu_src)
-        req->m_cache_id[MEM_LLC] = 0;
-      // pim bit disabled
-    } else {
-      //FIXME : Joonho
-      req->m_cache_id[MEM_LLC] = llc_hash(req->m_addr) % m_num_llc;
-    }
-  // LLC HASH disabled
-  } else {
-    req->m_cache_id[MEM_LLC] = BANK(req->m_addr, m_num_llc, m_llc_interleave_factor);
-    if (KNOB(KNOB_LLC_HASH_BIT)->getValue()) 
-      req->m_cache_id[MEM_LLC] = 0;
-  }
+  req->m_cache_id[MEM_LLC] = slice_id;
 
   req->m_cache_id[MEM_MC] =
     BANK(req->m_addr, m_num_mc, *KNOB(KNOB_DRAM_INTERLEAVE_FACTOR));

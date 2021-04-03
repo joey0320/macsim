@@ -329,6 +329,10 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
               uop_latency = access_data_cache(uop);
 #else  // USING_SST
             if (uop->m_pim_alu_src && uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) { // offload ld inst to LLC
+              int slice_id = uop->get_llc_slice_id();
+              assert(!uop->check_cache(m_core_id, MEM_L1) && 
+                     !uop->check_cache(m_core_id, MEM_L2) &&
+                     uop->check_cache(slice_id, MEM_LLC));
               uop_latency = 1;
             } else {
               uop_latency = MEMORY->access(uop);

@@ -452,79 +452,63 @@ void schedule_c::advance(int q_index) {
 // only call for llc pim candidates for offloading
 bool schedule_c::check_pair_matching(uop_c *uop) {
   assert(uop->m_pim_alu_src);
-
-  int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
-  int slice_id = 0;
-  int slice_id_pair = 0;
-
-  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
-    slice_id = llc_hash(uop->m_vaddr) % num_llc;
-
-    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
-        uop->m_pim_alu_src)
-      slice_id = m_core_id;
-  } else {
-    slice_id = m_core_id;
-  }
+  assert(m_core_id == uop->m_core_id);
 
   if (!uop->m_uop_src_pair)
     return false;
 
+  int slice_id = uop->get_llc_slice_id();
+  bool l1_hit = uop->check_cache(m_core_id, MEM_L1);
+  bool l2_hit = uop->check_cache(m_core_id, MEM_L2);
+  bool l4_hit = uop->check_cache(slice_id, MEM_LLC);
+  
+  if (l1_hit || l2_hit) {
+    STAT_CORE_EVENT(m_core_id, SRC_UPPER_LEVEL);
+    return false;
+  }
+  
   uop_c *pair = uop->m_uop_src_pair;
   assert(pair->m_pim_alu_src);
   assert(pair->m_uop_src_pair == uop);
   assert(pair->m_mem_type == MEM_LD);
-  
-  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
-    slice_id_pair = llc_hash(pair->m_vaddr) % num_llc;
-    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
-        pair->m_pim_alu_src)
-      slice_id_pair  = pair->m_core_id;
-  } else {
-    slice_id_pair = pair->m_core_id;
+
+  int slice_id_pair = pair->get_llc_slice_id();
+  bool l1_hit_pair = pair->check_cache(m_core_id, MEM_L1);
+  bool l2_hit_pair = pair->check_cache(m_core_id, MEM_L2);
+  bool l4_hit_pair = pair->check_cache(slice_id_pair, MEM_LLC);
+
+  if (l1_hit_pair || l2_hit_pair) {
+    STAT_CORE_EVENT(m_core_id, SRC_UPPER_LEVEL);
+    return false;
   }
-  
-  int core_id = uop->m_core_id;
-  int thread_id = uop->m_thread_id;
-  int appl_id = m_simBase->m_core_pointers[core_id]->get_appl_id(thread_id);
-  dcu_c *llc = MEMORY->m_llc_cache[slice_id];
-  Addr line_addr = llc->base_addr(uop->m_vaddr);
-  dcache_data_s *cache_line = llc->access_cache(uop->m_vaddr, &line_addr, false, appl_id);
 
-  assert(pair->m_thread_id == thread_id);
-  assert(pair->m_core_id == core_id);
-
-  dcu_c *llc_pair = MEMORY->m_llc_cache[slice_id_pair];
-  Addr line_addr_pair = llc_pair->base_addr(pair->m_vaddr);
-  dcache_data_s *cache_line_pair = llc_pair->access_cache(pair->m_vaddr, &line_addr_pair, false, appl_id);
-
-  if (!cache_line || !cache_line_pair) {
-    STAT_EVENT(LLC_SRC_MISSING);
+  if (!l4_hit || !l4_hit_pair) {
+    STAT_CORE_EVENT(m_core_id, LLC_SRC_MISSING);
     return false;
   }
 
   if (slice_id != slice_id_pair) {
-    STAT_EVENT(LLC_SRC_HET_SLICE);
+    STAT_CORE_EVENT(m_core_id, LLC_SRC_HET_SLICE);
     return false;
   }
 
   uop->m_pim_offloaded = true;
   pair->m_pim_offloaded = true;
 
-  STAT_EVENT(LLC_SRC_OFFLOAD);
+  STAT_CORE_EVENT(m_core_id, LLC_SRC_OFFLOAD);
 
   switch(slice_id) {
     case 0:
-      STAT_EVENT(SLICE_0);
+      STAT_CORE_EVENT(m_core_id, SLICE_0);
       break;
     case 1:
-      STAT_EVENT(SLICE_1);
+      STAT_CORE_EVENT(m_core_id, SLICE_1);
       break;
     case 2:
-      STAT_EVENT(SLICE_2);
+      STAT_CORE_EVENT(m_core_id, SLICE_2);
       break;
     case 3:
-      STAT_EVENT(SLICE_3);
+      STAT_CORE_EVENT(m_core_id, SLICE_3);
       break;
     default:
       ASSERT(0);
