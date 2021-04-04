@@ -88,7 +88,6 @@ perfect_dcache 0
 enable_cache_coherence 0
 dram_merge_requests 1
 mem_ooo_stores 0
-memory_type llc_decoupled_network
 byte_level_access 0
 infinite_port 0
 
@@ -104,6 +103,10 @@ pim_fp_regfile_size 32
 noc_topology mesh
 noc_dimension 2
 
+# memory type
+memory_type llc_coupled_network
+num_l3 4
+
 # LLC Cache
 num_llc 4
 llc_num_set 2048
@@ -115,15 +118,15 @@ pref_framework_on 1
 enable_pref_small_core 0
 
 llc_stat 1               # for pim - stat collection
-llc_offload 0            # offload instructions ??
+llc_offload 1            # offload instructions ??
 llc_hash_enable 1
-llc_hash_bit 0
+llc_hash_bit 1
 
 #TLB : disable for now since we do not access TLB before checking offload
 enable_physical_mapping 0 
 
 # OUTPUT DIR
-out ../stats-out/pim/mesh/3/hb0-offld0-128k
+out ../stats-out/pim/kmp/code-test
 ######################################################################
 
 
