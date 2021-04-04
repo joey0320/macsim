@@ -163,13 +163,14 @@ void map_c::add_src_from_map_entry(uop_c *uop, int src_num,
 
   // changed by Joonho
   // mark the src uop that the current uop depends on
-  // we still have to check if both src_uop are m_pim_alu_src
-  if (uop->m_pim_region && 
-      uop->m_uop_type == UOP_IADD &&
-      uop->m_num_srcs == 2) {
+  // we still have to check if all src_uops of mem type are m_pim_alu_src
+  if (uop->m_pim_region &&
+      uop->m_mem_type == NOT_MEM) {
     uop_c *src_uop = info->m_uop;
-    if (src_uop->m_mem_type == MEM_LD)
+    if (src_uop->m_mem_type == MEM_LD) {
       src_uop->m_pim_alu_src = true;
+      src_uop->m_pim_parent = uop;
+    }
   }
 
   // set source bit not ready
@@ -527,23 +528,3 @@ void delete_store_hash_entry_wrapper(map_c *map, uop_c *uop) {
   map->delete_store_hash_entry(uop);
 }
 
-void map_c::pair_src_uops(uop_c *uop) {
-  if (!uop->m_pim_region || uop->m_num_srcs != 2 || uop->m_uop_type != UOP_IADD) 
-    return;
-
-  bool ld_src = true;
-  
-  for (int ii = 0; ii < uop->m_num_srcs; ii++) {
-    uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
-    if (src_uop->m_mem_type != MEM_LD)
-      ld_src = false;
-  }
-
-  if (ld_src) {
-    for (int ii = 0; ii < uop->m_num_srcs; ii++) {
-      uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
-      assert(src_uop->m_pim_alu_src);
-      src_uop->m_uop_src_pair = uop->m_map_src_info[1 - ii].m_uop;
-    }
-  }
-}

@@ -604,6 +604,7 @@ public:
   // Added by Joonho
   int get_llc_slice_id();
   bool check_cache(int slice_id, int level);
+  bool check_llc(int slice_id);
 
   static const char
     *g_mem_type_name[NUM_MEM_TYPES]; /**< uop memory type string */
@@ -707,7 +708,7 @@ public:
   bool m_pim_alu_src; /**< is source uop of pim alu uop */
   bool m_pim_offloaded; /**< is is offloaded to llc */
 
-  uop_c *m_uop_src_pair;
+  uop_c *m_pim_parent;
 
 private:
   macsim_c *m_simBase; /**< macsim_c base class for simulation globals */

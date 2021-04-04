@@ -173,6 +173,8 @@ typedef struct mem_req_s {
 
   function<bool(mem_req_s*)> m_done_func; /**< done function */
   list<mem_req_s*> m_merge; /**< merged request list */
+
+  bool m_pim_req;
 } mem_req_s;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

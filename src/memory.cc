@@ -1999,6 +1999,8 @@ void memory_c::init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
 
   ASSERT(req->m_merge.empty());
 
+  req->m_pim_req = uop->m_pim_region;
+
   set_cache_id(req);
 }
 
@@ -2032,6 +2034,7 @@ void memory_c::adjust_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
   req->m_merged_req = NULL;
   req->m_bypass = false;
   req->m_skip = false;
+  req->m_pim_req = uop->m_pim_region;
 
   set_cache_id(req);
 }

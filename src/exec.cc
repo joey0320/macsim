@@ -330,10 +330,9 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
 #else  // USING_SST
             if (uop->m_pim_alu_src && uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) { // offload ld inst to LLC
               int slice_id = uop->get_llc_slice_id();
-              assert(!uop->check_cache(m_core_id, MEM_L1) && 
-                     !uop->check_cache(m_core_id, MEM_L2) &&
-                     uop->check_cache(slice_id, MEM_LLC));
-              uop_latency = 1;
+              assert(uop->check_llc(slice_id));
+              uop_latency = 10;
+              STAT_CORE_EVENT(m_core_id, LLC_OFFLOAD_LD);
             } else {
               uop_latency = MEMORY->access(uop);
             }
@@ -452,13 +451,14 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
 #ifdef USING_SST
                 latency = access_data_cache(uop->m_child_uops[next_set_bit]);
 #else  // USING_SST
-/* if (uop->m_pim_region && uop->m_avx_type) { // ld to LLC */
-            // FIXME : consider pim_alu_src uops that have child memory operations
-            if (uop->m_pim_alu_src && uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) { // ld to LLC
-                latency = 1;
-              } else {
-                latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
-              }
+                // FIXME : ?? not sure what to do when this happens..
+                uop_c *child_uop = uop->m_child_uops[next_set_bit];
+                if (child_uop->m_pim_alu_src && child_uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) {
+                  latency = 10;
+                  STAT_CORE_EVENT(m_core_id, LLC_OFFLOAD_LD);
+                } else {
+                  latency = MEMORY->access(uop->m_child_uops[next_set_bit]);
+                }
 #endif  // USING_SST
 
 #if PORT_FIXME
@@ -583,6 +583,12 @@ bool exec_c::exec(int thread_id, int entry, uop_c* uop) {
     uop_latency = get_latency(uop_type);
     if (!uop->m_pim_offloaded || !KNOB(KNOB_LLC_OFFLOAD)->getValue())
       use_port(thread_id, entry);
+
+    // TODO : consider noc latency
+    if (uop->m_pim_offloaded && KNOB(KNOB_LLC_OFFLOAD)->getValue()) {
+      uop_latency = get_latency(uop_type);
+      STAT_CORE_EVENT(m_core_id, LLC_OFFLOAD_ALU);
+    }
 
     switch (uop_type) {
       case UOP_FCF:

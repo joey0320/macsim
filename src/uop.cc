@@ -488,7 +488,7 @@ void uop_c::init() {
   m_pim_alu_src = false;
   m_pim_offloaded = false;
 
-  m_uop_src_pair = NULL;
+  m_pim_parent = NULL;
 }
 
 // initialize a new uop
@@ -524,7 +524,7 @@ uop_c *uop_c::free() {
   m_pim_alu_src = false;
   m_pim_offloaded = false;
 
-  m_uop_src_pair = NULL;
+  m_pim_parent = NULL;
 
   return this;
 }
@@ -576,3 +576,15 @@ bool uop_c::check_cache(int slice_id, int level) {
   else
     return false;
 }
+
+bool uop_c::check_llc(int slice_id) {
+  bool l1_hit = check_cache(m_core_id, MEM_L1);
+  bool l2_hit = check_cache(m_core_id, MEM_L2);
+  bool l4_hit = check_cache(slice_id, MEM_LLC);
+
+  if (l1_hit || l2_hit || !l4_hit)
+    return false;
+  else
+    return true;
+}
+

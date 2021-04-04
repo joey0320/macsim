@@ -212,14 +212,10 @@ int schedule_c::uop_schedule(int entry, SCHED_FAIL_TYPE* sched_fail_reason) {
 
   bool offload_inst = false;
   if (!bogus) {
-    // Offload ld instructions
-    // don't need to do this for ALU operations : only a few hundred cycles are saved
     if (KNOB(KNOB_LLC_STAT)->getValue() &&
-        cur_uop->m_pim_alu_src) {
+        cur_uop->m_pim_region) {
 
-      // check if cur_uop has pair uop that is also a src ld of a pim IADD operation
-      // also collect some stats about LLC
-      if (check_pair_matching(cur_uop))
+      if (check_offload(cur_uop))
         offload_inst = true;
     }
 
@@ -449,71 +445,94 @@ void schedule_c::advance(int q_index) {
   }
 }
 
-// only call for llc pim candidates for offloading
-bool schedule_c::check_pair_matching(uop_c *uop) {
-  assert(uop->m_pim_alu_src);
+bool schedule_c::check_offload(uop_c *uop) {
+  assert(uop->m_pim_region);
   assert(m_core_id == uop->m_core_id);
 
-  if (!uop->m_uop_src_pair)
-    return false;
+  bool offload = true;
+  // we can offload alu instruction when all ld dep are in llc
+  if (uop->m_mem_type == NOT_MEM) { 
+    for (int ii = 0; ii < uop->m_num_srcs; ii++) {
+      uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
 
-  int slice_id = uop->get_llc_slice_id();
-  bool l1_hit = uop->check_cache(m_core_id, MEM_L1);
-  bool l2_hit = uop->check_cache(m_core_id, MEM_L2);
-  bool l4_hit = uop->check_cache(slice_id, MEM_LLC);
-  
-  if (l1_hit || l2_hit) {
-    STAT_CORE_EVENT(m_core_id, SRC_UPPER_LEVEL);
-    return false;
-  }
-  
-  uop_c *pair = uop->m_uop_src_pair;
-  assert(pair->m_pim_alu_src);
-  assert(pair->m_uop_src_pair == uop);
-  assert(pair->m_mem_type == MEM_LD);
+      if (src_uop->m_mem_type == MEM_LD) {
+        int slice_id = src_uop->get_llc_slice_id();
+        if (!src_uop->check_llc(slice_id)) { // not in llc
+          offload = false;
+        }
+      }
+    }
+  } 
+  // check if ld type instructions are offloadable
+  else if (uop->m_mem_type == MEM_LD) { 
+    int slice_id = uop->get_llc_slice_id();
 
-  int slice_id_pair = pair->get_llc_slice_id();
-  bool l1_hit_pair = pair->check_cache(m_core_id, MEM_L1);
-  bool l2_hit_pair = pair->check_cache(m_core_id, MEM_L2);
-  bool l4_hit_pair = pair->check_cache(slice_id_pair, MEM_LLC);
+    // src is in LLC
+    if (uop->check_llc(slice_id)) {
+      uop_c *parent_uop = uop->m_pim_parent;
 
-  if (l1_hit_pair || l2_hit_pair) {
-    STAT_CORE_EVENT(m_core_id, SRC_UPPER_LEVEL);
-    return false;
-  }
+      if (parent_uop) {
+        // we can only offload when ld is src of pim alu
+        if (!parent_uop->m_pim_region) { 
+          offload = false;
+        } else { // parent uop is in pim_region
+          for (int ii = 0; ii < parent_uop->m_num_srcs; ii++) {
+            uop_c *sib_uop = parent_uop->m_map_src_info[ii].m_uop;
 
-  if (!l4_hit || !l4_hit_pair) {
-    STAT_CORE_EVENT(m_core_id, LLC_SRC_MISSING);
-    return false;
-  }
+            if (sib_uop == uop)
+              continue;
 
-  if (slice_id != slice_id_pair) {
-    STAT_CORE_EVENT(m_core_id, LLC_SRC_HET_SLICE);
-    return false;
-  }
+            if (sib_uop->m_mem_type == MEM_LD) {
+              if (!sib_uop->m_pim_region) // we can only offload when all ld is in pim region
+                offload = false;
 
-  uop->m_pim_offloaded = true;
-  pair->m_pim_offloaded = true;
-
-  STAT_CORE_EVENT(m_core_id, LLC_SRC_OFFLOAD);
-
-  switch(slice_id) {
-    case 0:
-      STAT_CORE_EVENT(m_core_id, SLICE_0);
-      break;
-    case 1:
-      STAT_CORE_EVENT(m_core_id, SLICE_1);
-      break;
-    case 2:
-      STAT_CORE_EVENT(m_core_id, SLICE_2);
-      break;
-    case 3:
-      STAT_CORE_EVENT(m_core_id, SLICE_3);
-      break;
-    default:
-      ASSERT(0);
-      break;
+              int slice_id_sibling = sib_uop->get_llc_slice_id();
+              if (!sib_uop->check_llc(slice_id_sibling))
+                offload = false;
+            }
+          }
+        }
+      }
+    } 
+    // src is not in LLC
+    else { 
+      offload = false;
+    }
+  } 
+  // for miscellaneous types of instructions
+  else { 
+    offload = false;
   }
 
-  return true;
+  // collect stats
+  if (offload) {
+
+    uop->m_pim_offloaded = true;
+
+    STAT_CORE_EVENT(m_core_id, LLC_SRC_OFFLOAD);
+
+    if (uop->m_mem_type == MEM_LD) {
+      int slice_id = uop->get_llc_slice_id();
+      switch(slice_id) {
+        case 0:
+          STAT_CORE_EVENT(m_core_id, SLICE_0);
+          break;
+        case 1:
+          STAT_CORE_EVENT(m_core_id, SLICE_1);
+          break;
+        case 2:
+          STAT_CORE_EVENT(m_core_id, SLICE_2);
+          break;
+        case 3:
+          STAT_CORE_EVENT(m_core_id, SLICE_3);
+          break;
+        default:
+          ASSERT(0);
+          break;
+      }
+    }
+  }
+  return offload;
 }
+      
+    
