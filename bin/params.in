@@ -1,9 +1,9 @@
 
 # Simulation Configuration
-num_sim_cores 1
+num_sim_cores 4
 num_sim_small_cores 0
 num_sim_medium_cores 0
-num_sim_large_cores 1
+num_sim_large_cores 4
 core_type ptx
 large_core_type x86
 sim_cycle_count 0 
@@ -92,6 +92,14 @@ memory_type llc_decoupled_network
 byte_level_access 0
 infinite_port 0
 
+
+######################################################################
+# Simulation Params
+######################################################################
+# PIM
+pim_int_regfile_size 32
+pim_fp_regfile_size 32
+
 # NOC
 noc_topology mesh
 noc_dimension 2
@@ -100,15 +108,14 @@ noc_dimension 2
 num_llc 4
 llc_num_set 2048
 llc_line_size 64
-llc_assoc 32
+llc_assoc 10
 llc_num_bank 8
 llc_latency 30 
 pref_framework_on 1
 enable_pref_small_core 0
 
-llc_pim 1               # for pim - stat collection
-llc_ld 0                # for memory.cc : load directly to llc
-llc_offload 0           # offload instructions ??
+llc_stat 1               # for pim - stat collection
+llc_offload 0            # offload instructions ??
 llc_hash_enable 1
 llc_hash_bit 0
 
@@ -117,6 +124,7 @@ enable_physical_mapping 0
 
 # OUTPUT DIR
 out ../stats-out/pim/mesh/3/hb0-offld0-128k
+######################################################################
 
 
 # DRAM
@@ -132,10 +140,6 @@ dram_scheduling_policy FRFCFS
 
 # ETC
 bug_detector_enable 1
-
-# PIM
-pim_int_regfile_size 32
-pim_fp_regfile_size 32
 
 
 # DEBUG
