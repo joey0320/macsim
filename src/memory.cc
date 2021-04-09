@@ -868,13 +868,13 @@ void dcu_c::process_in_queue() {
       // Send a fill request to the upper level via direct path
       // -------------------------------------
       else {
-        if (!m_out_queue->push(req)) continue;
-        DEBUG_CORE(req->m_core_id,
-                   "L%d[%d] (in_queue->out_queue) req:%d type:%s access hit\n",
-                   m_level, m_id, req->m_id,
-                   mem_req_c::mem_req_type_name[req->m_type]);
-        req->m_state = MEM_OUT_FILL;
-        req->m_rdy_cycle = m_cycle + 1;
+          if (!m_out_queue->push(req)) continue;
+          DEBUG_CORE(req->m_core_id,
+              "L%d[%d] (in_queue->out_queue) req:%d type:%s access hit\n",
+              m_level, m_id, req->m_id,
+              mem_req_c::mem_req_type_name[req->m_type]);
+          req->m_state = MEM_OUT_FILL;
+          req->m_rdy_cycle = m_cycle + 1;
       }
 
       done_list.push_back(req);
@@ -1183,58 +1183,62 @@ void dcu_c::process_fill_queue() {
           // -------------------------------------
           // Insert a cache line
           // -------------------------------------
-          dcache_data_s* data;
-          data = (dcache_data_s*)m_cache->insert_cache(
-            req->m_addr, &line_addr, &victim_line_addr, req->m_appl_id,
-            req->m_acc);
+          if (m_level <= 2 && req->m_pim_req && KNOB(KNOB_LLC_OFFLOAD)->getValue()) { 
 
-          if (m_level != MEM_LLC) {
-            POWER_CORE_EVENT(req->m_core_id, POWER_DCACHE_W + (m_level - 1));
           } else {
-            POWER_EVENT(POWER_LLC_W);
-          }
+            dcache_data_s* data;
+            data = (dcache_data_s*)m_cache->insert_cache(
+                req->m_addr, &line_addr, &victim_line_addr, req->m_appl_id,
+                req->m_acc);
 
-          // -------------------------------------
-          // If there is a victim line, we do the write-back.
-          // -------------------------------------
-          if (victim_line_addr) {
-            if (data->m_dirty) {
-              if (*(m_simBase->m_knobs->KNOB_USE_INCOMING_TID_CID_FOR_WB)) {
-                data->m_core_id = req->m_core_id;
-                data->m_tid = req->m_thread_id;
-              }
-
-              // new write-back request
-              mem_req_s* wb = m_simBase->m_memory->new_wb_req(
-                victim_line_addr, m_line_size, m_acc_sim, data, m_level);
-
-              wb->m_rdy_cycle = m_cycle + 1;
-
-              if (!m_wb_queue->push(wb)) ASSERT(0);
-
-              if (m_level != MEM_LLC) {
-                POWER_CORE_EVENT(req->m_core_id,
-                                 POWER_DCACHE_WB_BUF_W + m_level - MEM_L1);
-              } else {
-                POWER_EVENT(POWER_LLC_WB_BUF_W);
-              }
-
-              DEBUG_CORE(req->m_core_id,
-                         "L%d[%d] (fill_queue) new_wb_req:%d addr:0x%llx "
-                         "type:%s by req:%d\n",
-                         m_level, m_id, wb->m_id, victim_line_addr,
-                         mem_req_c::mem_req_type_name[wb->m_type], req->m_id);
+            if (m_level != MEM_LLC) {
+              POWER_CORE_EVENT(req->m_core_id, POWER_DCACHE_W + (m_level - 1));
+            } else {
+              POWER_EVENT(POWER_LLC_W);
             }
-          }
 
-          // -------------------------------------
-          // cache line setup
-          // -------------------------------------
-          data->m_dirty = req->m_dirty;
-          data->m_fetch_cycle = m_cycle;
-          data->m_core_id = req->m_core_id;
-          data->m_pc = req->m_pc;
-          data->m_tid = req->m_thread_id;
+            // -------------------------------------
+            // If there is a victim line, we do the write-back.
+            // -------------------------------------
+            if (victim_line_addr) {
+              if (data->m_dirty) {
+                if (*(m_simBase->m_knobs->KNOB_USE_INCOMING_TID_CID_FOR_WB)) {
+                  data->m_core_id = req->m_core_id;
+                  data->m_tid = req->m_thread_id;
+                }
+
+                // new write-back request
+                mem_req_s* wb = m_simBase->m_memory->new_wb_req(
+                    victim_line_addr, m_line_size, m_acc_sim, data, m_level);
+
+                wb->m_rdy_cycle = m_cycle + 1;
+
+                if (!m_wb_queue->push(wb)) ASSERT(0);
+
+                if (m_level != MEM_LLC) {
+                  POWER_CORE_EVENT(req->m_core_id,
+                      POWER_DCACHE_WB_BUF_W + m_level - MEM_L1);
+                } else {
+                  POWER_EVENT(POWER_LLC_WB_BUF_W);
+                }
+
+                DEBUG_CORE(req->m_core_id,
+                    "L%d[%d] (fill_queue) new_wb_req:%d addr:0x%llx "
+                    "type:%s by req:%d\n",
+                    m_level, m_id, wb->m_id, victim_line_addr,
+                    mem_req_c::mem_req_type_name[wb->m_type], req->m_id);
+              }
+            }
+
+            // -------------------------------------
+            // cache line setup
+            // -------------------------------------
+            data->m_dirty = req->m_dirty;
+            data->m_fetch_cycle = m_cycle;
+            data->m_core_id = req->m_core_id;
+            data->m_pc = req->m_pc;
+            data->m_tid = req->m_thread_id;
+          }
         } else if (line != NULL) {
           line->m_dirty |= req->m_dirty;
         }
@@ -1494,58 +1498,60 @@ bool dcu_c::done(mem_req_s* req) {
       // -------------------------------------
       // DCACHE insertion
       // -------------------------------------
-      data = (dcache_data_s*)m_cache->insert_cache(
-        addr, &line_addr, &repl_line_addr, req->m_appl_id, req->m_acc);
+      if (!req->m_pim_req || !KNOB(KNOB_LLC_OFFLOAD)->getValue()) {
+        data = (dcache_data_s*)m_cache->insert_cache(
+            addr, &line_addr, &repl_line_addr, req->m_appl_id, req->m_acc);
 
-      if (m_level != MEM_LLC) {
-        POWER_CORE_EVENT(req->m_core_id, POWER_DCACHE_W + (m_level - 1));
-      } else {
-        POWER_EVENT(POWER_LLC_W);
-      }
+        if (m_level != MEM_LLC) {
+          POWER_CORE_EVENT(req->m_core_id, POWER_DCACHE_W + (m_level - 1));
+        } else {
+          POWER_EVENT(POWER_LLC_W);
+        }
 
-      if (*m_simBase->m_knobs->KNOB_ENABLE_CACHE_COHERENCE) {
-      }
+        if (*m_simBase->m_knobs->KNOB_ENABLE_CACHE_COHERENCE) {
+        }
 
-      // -------------------------------------
-      // evict a line
-      // -------------------------------------
-      if (repl_line_addr) {
-        // STAT_CORE_EVENT(req->m_core_id, POWER_DCACHE_C);
-        if (data->m_dirty == 1) {
-          if (*(m_simBase->m_knobs->KNOB_USE_INCOMING_TID_CID_FOR_WB)) {
-            data->m_core_id = req->m_core_id;
-            data->m_tid = req->m_thread_id;
-          }
+        // -------------------------------------
+        // evict a line
+        // -------------------------------------
+        if (repl_line_addr) {
+          // STAT_CORE_EVENT(req->m_core_id, POWER_DCACHE_C);
+          if (data->m_dirty == 1) {
+            if (*(m_simBase->m_knobs->KNOB_USE_INCOMING_TID_CID_FOR_WB)) {
+              data->m_core_id = req->m_core_id;
+              data->m_tid = req->m_thread_id;
+            }
 
-          // new write back request
-          mem_req_s* wb = m_simBase->m_memory->new_wb_req(
-            repl_line_addr, m_line_size, m_acc_sim, data, m_level);
+            // new write back request
+            mem_req_s* wb = m_simBase->m_memory->new_wb_req(
+                repl_line_addr, m_line_size, m_acc_sim, data, m_level);
 
-          wb->m_rdy_cycle = m_cycle + 1;
+            wb->m_rdy_cycle = m_cycle + 1;
 
-          // FIXME(jaekyu, 10-26-2011) - queue rejection
-          if (!m_wb_queue->push(wb)) ASSERT(0);
+            // FIXME(jaekyu, 10-26-2011) - queue rejection
+            if (!m_wb_queue->push(wb)) ASSERT(0);
 
-          DEBUG_CORE(
-            req->m_core_id,
-            "L%d[%d] (done) new_wb_req:%d addr:0x%llx by req:%d type:%s\n",
-            m_level, m_id, wb->m_id, repl_line_addr, req->m_id,
-            mem_req_c::mem_req_type_name[MRT_WB]);
+            DEBUG_CORE(
+                req->m_core_id,
+                "L%d[%d] (done) new_wb_req:%d addr:0x%llx by req:%d type:%s\n",
+                m_level, m_id, wb->m_id, repl_line_addr, req->m_id,
+                mem_req_c::mem_req_type_name[MRT_WB]);
 
-          if (m_level != MEM_LLC) {
-            POWER_CORE_EVENT(req->m_core_id,
-                             POWER_DCACHE_WB_BUF_W + m_level - MEM_L1);
-          } else {
-            POWER_EVENT(POWER_LLC_WB_BUF_W);
+            if (m_level != MEM_LLC) {
+              POWER_CORE_EVENT(req->m_core_id,
+                  POWER_DCACHE_WB_BUF_W + m_level - MEM_L1);
+            } else {
+              POWER_EVENT(POWER_LLC_WB_BUF_W);
+            }
           }
         }
-      }
 
-      data->m_dirty = req->m_dirty;
-      data->m_fetch_cycle = m_cycle;
-      data->m_core_id = req->m_core_id;
-      data->m_pc = req->m_pc;
-      data->m_tid = req->m_thread_id;
+        data->m_dirty = req->m_dirty;
+        data->m_fetch_cycle = m_cycle;
+        data->m_core_id = req->m_core_id;
+        data->m_pc = req->m_pc;
+        data->m_tid = req->m_thread_id;
+      }
     } else {
       line->m_dirty |= req->m_dirty;
     }
@@ -1996,10 +2002,9 @@ void memory_c::init_new_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
   req->m_merged_req = NULL;
   req->m_bypass = uop ? uop->m_bypass_llc : false;
   req->m_skip = uop ? uop->m_skip_llc : false;
+  req->m_pim_req = uop ? uop->m_pim_region : false;
 
   ASSERT(req->m_merge.empty());
-
-  req->m_pim_req = uop->m_pim_region;
 
   set_cache_id(req);
 }
@@ -2034,7 +2039,7 @@ void memory_c::adjust_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
   req->m_merged_req = NULL;
   req->m_bypass = false;
   req->m_skip = false;
-  req->m_pim_req = uop->m_pim_region;
+  req->m_pim_req = uop ? uop->m_pim_region : false;
 
   set_cache_id(req);
 }
@@ -2043,7 +2048,8 @@ void memory_c::adjust_req(mem_req_s* req, Mem_Req_Type type, Addr addr,
 void memory_c::set_cache_id(mem_req_s* req) {
   req->m_cache_id[MEM_L1] = req->m_core_id;
   req->m_cache_id[MEM_L2] = req->m_core_id;
-  req->m_cache_id[MEM_L3] = BANK(req->m_addr, m_num_l3, m_l3_interleave_factor);
+/* req->m_cache_id[MEM_L3] = BANK(req->m_addr, m_num_l3, m_l3_interleave_factor); */
+  req->m_cache_id[MEM_L3] = req->m_core_id;
   
   int slice_id;
   uop_c *uop  = req->m_uop;
@@ -2426,7 +2432,7 @@ llc_coupled_network_c::llc_coupled_network_c(macsim_c* simBase)
   for (int ii = 0; ii < m_num_core; ++ii) {
     m_l1_cache[ii]->init(ii, -1, false, false, true, false, false);
     m_l2_cache[ii]->init(ii, ii, true, true, true, false, true);
-    m_l3_cache[ii]->init(-1, -1, false, false, false, true, true);
+    m_l3_cache[ii]->init(ii, ii, false, true, true, true, true);
     m_llc_cache[ii]->init(-1, ii, false, true, false, false, true);
   }
 

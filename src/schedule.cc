@@ -447,7 +447,6 @@ void schedule_c::advance(int q_index) {
 
 bool schedule_c::check_offload(uop_c *uop) {
   assert(uop->m_pim_region);
-  assert(m_core_id == uop->m_core_id);
 
   bool offload = true;
   // we can offload alu instruction when all ld dep are in llc
@@ -456,6 +455,7 @@ bool schedule_c::check_offload(uop_c *uop) {
       uop_c *src_uop = uop->m_map_src_info[ii].m_uop;
 
       if (src_uop->m_mem_type == MEM_LD) {
+        // FIXME : should only be called once
         int slice_id = src_uop->get_llc_slice_id();
         if (!src_uop->check_llc(slice_id)) { // not in llc
           offload = false;
@@ -466,6 +466,12 @@ bool schedule_c::check_offload(uop_c *uop) {
   // check if ld type instructions are offloadable
   else if (uop->m_mem_type == MEM_LD) { 
     int slice_id = uop->get_llc_slice_id();
+
+#if 1
+    bool l1_hit = uop->check_cache(m_core_id, MEM_L1);
+    bool l2_hit = uop->check_cache(m_core_id, MEM_L2);
+    bool l4_hit = uop->check_cache(slice_id, MEM_LLC);
+#endif
 
     // src is in LLC
     if (uop->check_llc(slice_id)) {
@@ -487,7 +493,7 @@ bool schedule_c::check_offload(uop_c *uop) {
                 offload = false;
 
               int slice_id_sibling = sib_uop->get_llc_slice_id();
-              if (!sib_uop->check_llc(slice_id_sibling))
+              if (slice_id_sibling != slice_id || !sib_uop->check_llc(slice_id_sibling))
                 offload = false;
             }
           }

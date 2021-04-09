@@ -489,6 +489,7 @@ void uop_c::init() {
   m_pim_offloaded = false;
 
   m_pim_parent = NULL;
+  m_llc_slice_id = -1;
 }
 
 // initialize a new uop
@@ -525,27 +526,66 @@ uop_c *uop_c::free() {
   m_pim_offloaded = false;
 
   m_pim_parent = NULL;
+  m_llc_slice_id = -1;
 
   return this;
+}
+
+void uop_c::set_llc_slice_id() {
+  assert(m_mem_type != NOT_MEM);
+  assert(!KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue());
+
+  // m_llc_slice_id is already set
+  if (m_llc_slice_id >= 0)
+    return;
+
+  // m_llc_slice_id is not set
+  int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
+  int slice_id = 0;
+
+  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
+    // slice_id is the hash value of address
+    slice_id = llc_hash(m_vaddr) % num_llc;
+    
+    // check if all sibling LD operations are in pim_region
+    bool all_sibling_is_pim = true;
+    uop_c *par_uop = m_pim_parent;
+    if (m_pim_alu_src) {
+      for (int ii = 0; ii < par_uop->m_num_srcs; ii++) {
+        uop_c *sib_uop = par_uop->m_map_src_info[ii].m_uop;
+        if (sib_uop->m_mem_type == MEM_LD && !sib_uop->m_pim_region)
+          all_sibling_is_pim = false;
+      }
+    }
+
+    // all sibling memory operations should go to the same slice
+    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() && m_pim_alu_src && all_sibling_is_pim) {
+      for (int ii = 0; ii < par_uop->m_num_srcs; ii++) {
+        uop_c *sib_uop = par_uop->m_map_src_info[ii].m_uop;
+
+        if (sib_uop == this)
+          continue;
+
+        if (sib_uop->m_mem_type == MEM_LD && sib_uop->m_pim_region) {
+          assert(sib_uop->m_pim_alu_src);
+          sib_uop->m_llc_slice_id = slice_id;
+        }
+      }
+    }
+  } else {
+    slice_id = m_core_id;
+  }
+  m_llc_slice_id = slice_id;
 }
 
 int uop_c::get_llc_slice_id() {
   assert(m_mem_type != NOT_MEM);
   assert(!KNOB(KNOB_ENABLE_PHYSICAL_MAPPING)->getValue());
 
-  int num_llc = *m_simBase->m_knobs->KNOB_NUM_LLC;
-  int slice_id = 0;
-
-  if (KNOB(KNOB_LLC_HASH_ENABLE)->getValue()) {
-    slice_id = llc_hash(m_vaddr) % num_llc;
-
-    if (KNOB(KNOB_LLC_HASH_BIT)->getValue() &&
-        m_pim_alu_src)
-      slice_id = m_core_id;
-  } else {
-    slice_id = m_core_id;
-  }
-  return slice_id;
+  if (m_llc_slice_id < 0)
+    set_llc_slice_id();
+  
+  return m_llc_slice_id;
 }
 
 bool uop_c::check_cache(int slice_id, int level) {
@@ -582,9 +622,10 @@ bool uop_c::check_llc(int slice_id) {
   bool l2_hit = check_cache(m_core_id, MEM_L2);
   bool l4_hit = check_cache(slice_id, MEM_LLC);
 
-  if (l1_hit || l2_hit || !l4_hit)
-    return false;
-  else
+  // cache is inclusive
+  if (!l1_hit && !l2_hit && l4_hit)
     return true;
+  else
+    return false;
 }
 

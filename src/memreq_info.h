@@ -174,7 +174,7 @@ typedef struct mem_req_s {
   function<bool(mem_req_s*)> m_done_func; /**< done function */
   list<mem_req_s*> m_merge; /**< merged request list */
 
-  bool m_pim_req;
+  bool m_pim_req; /**< check if request can go to upper levels of the cache hierarchy */
 } mem_req_s;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

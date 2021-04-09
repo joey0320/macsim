@@ -603,6 +603,7 @@ public:
 
   // Added by Joonho
   int get_llc_slice_id();
+  void set_llc_slice_id();
   bool check_cache(int slice_id, int level);
   bool check_llc(int slice_id);
 
@@ -709,6 +710,7 @@ public:
   bool m_pim_offloaded; /**< is is offloaded to llc */
 
   uop_c *m_pim_parent;
+  int m_llc_slice_id;
 
 private:
   macsim_c *m_simBase; /**< macsim_c base class for simulation globals */
