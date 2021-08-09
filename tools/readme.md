@@ -66,8 +66,8 @@
   - this will generate ```a.out``` file
 
 5. set up the evironment variables
-  - export COMPUTE_VERSION="2.0"
-  - export KERNEL_INFO_PATH="kernel_info"
+  - ```export COMPUTE_VERSION="2.0"```
+  - ```export KERNEL_INFO_PATH="kernel_info"```
 
 6. generate traces
-  - ./gpu_tracegen.py -cmd=./a.out
+  - ```./gpu_tracegen.py -cmd=./a.out```
