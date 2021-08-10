@@ -161,6 +161,7 @@ private:
   unique_ptr<TLB> m_TLB;
   unique_ptr<ReplacementUnit> m_replacement_unit;
 
+  long m_tlb_latency;
   long m_walk_latency;
   long m_fault_latency;
   long m_eviction_latency;

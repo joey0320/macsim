@@ -132,6 +132,7 @@ void MMU::initialize(macsim_c *simBase) {
   m_TLB = make_unique<TLB>(
     m_simBase, m_simBase->m_knobs->KNOB_TLB_NUM_ENTRY->getValue(), m_page_size);
 
+  m_tlb_latency = m_simBase->m_knobs->KNOB_TLB_ACCESS_LATENCY->getValue();
   m_walk_latency = m_simBase->m_knobs->KNOB_PAGE_TABLE_WALK_LATENCY->getValue();
   m_fault_latency = m_simBase->m_knobs->KNOB_PAGE_FAULT_LATENCY->getValue();
   m_eviction_latency =
@@ -190,7 +191,7 @@ bool MMU::translate(uop_c *cur_uop) {
         .end())  // this page is already being serviced, so piggyback
     it->second.emplace_back(cur_uop);
   else {
-    Counter ready_cycle = m_cycle + m_walk_latency;
+    Counter ready_cycle = m_cycle + m_tlb_latency;
     m_walk_queue_cycle.emplace(ready_cycle, list<Addr>());
     m_walk_queue_cycle[ready_cycle].emplace_back(page_number);
     m_walk_queue_page.emplace(page_number, list<uop_c *>());
@@ -308,7 +309,7 @@ void MMU::do_page_table_walks(uop_c *cur_uop) {
 
   auto it = m_page_table.find(page_number);
 
-  // assume to page faults for now
+  // assume no page faults for now
   if (it == m_page_table.end()) {
     auto frame_number = ++m_frame_to_allocate;
 
