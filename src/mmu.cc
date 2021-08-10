@@ -180,6 +180,7 @@ bool MMU::translate(uop_c *cur_uop) {
     m_cycle, cur_uop->m_core_id, cur_uop->m_thread_id, cur_uop->m_inst_num,
     cur_uop->m_uop_num);
 
+  // TODO : Connect IOMMU-SIM
   // TLB miss occurs
   // Put this request into page table walk queue so that it can be handled later
   // in time
@@ -271,16 +272,16 @@ void MMU::run_a_cycle(bool pll_lock) {
 
   // retry page faults once a new batch processing begins
   // i.e., right after the fault buffer drains
-  if (m_fault_buffer.empty() && !m_fault_retry_queue.empty()) {
-    list<uop_c *> m_fault_retry_queue_processing;
-    std::move(m_fault_retry_queue.begin(), m_fault_retry_queue.end(),
-              std::back_inserter(m_fault_retry_queue_processing));
-    m_fault_retry_queue.clear();
+/* if (m_fault_buffer.empty() && !m_fault_retry_queue.empty()) { */
+/* list<uop_c *> m_fault_retry_queue_processing; */
+/* std::move(m_fault_retry_queue.begin(), m_fault_retry_queue.end(), */
+/* std::back_inserter(m_fault_retry_queue_processing)); */
+/* m_fault_retry_queue.clear(); */
 
-    for (auto &&uop : m_fault_retry_queue_processing) do_page_table_walks(uop);
+/* for (auto &&uop : m_fault_retry_queue_processing) do_page_table_walks(uop); */
 
-    m_fault_retry_queue_processing.clear();
-  }
+/* m_fault_retry_queue_processing.clear(); */
+/* } */
 
   // do page table walks
   for (auto it = m_walk_queue_cycle.begin(); it != m_walk_queue_cycle.end();
@@ -306,76 +307,42 @@ void MMU::do_page_table_walks(uop_c *cur_uop) {
   Addr page_offset = get_page_offset(addr);
 
   auto it = m_page_table.find(page_number);
-  if (it != m_page_table.end()) {  // page table hit
-    Addr frame_number = it->second.frame_number;
-    cur_uop->m_paddr = (frame_number << m_offset_bits) | page_offset;
-    cur_uop->m_state = OS_TRANS_RETRY_QUEUE;
-    cur_uop->m_translated = true;
 
-    if (cur_uop->m_parent_uop && cur_uop->m_parent_uop->m_num_page_table_walks)
-      --cur_uop->m_parent_uop->m_num_page_table_walks;
+  // assume to page faults for now
+  if (it == m_page_table.end()) {
+    auto frame_number = ++m_frame_to_allocate;
 
-    if (!m_TLB->lookup(addr)) m_TLB->insert(addr, frame_number);
-    m_TLB->update(addr);
+    // allocate an entry in the page table
+    m_page_table.emplace(piecewise_construct, forward_as_tuple(page_number),
+        forward_as_tuple(frame_number));
+  }
 
-    m_replacement_unit->update(page_number);
+  it = m_page_table.find(page_number);
 
-    STAT_EVENT(PAGETABLE_HIT);
+  Addr frame_number = it->second.frame_number;
+  cur_uop->m_paddr = (frame_number << m_offset_bits) | page_offset;
+  cur_uop->m_state = OS_TRANS_RETRY_QUEUE;
+  cur_uop->m_translated = true;
 
-    DEBUG(
+  if (cur_uop->m_parent_uop && cur_uop->m_parent_uop->m_num_page_table_walks)
+    --cur_uop->m_parent_uop->m_num_page_table_walks;
+
+  if (!m_TLB->lookup(addr)) m_TLB->insert(addr, frame_number);
+  m_TLB->update(addr);
+
+  // no need to evict pages for now (not page faults)
+/* m_replacement_unit->update(page_number); */
+
+  STAT_EVENT(PAGETABLE_HIT);
+
+  DEBUG(
       "page table hit at %llu - core_id:%d thread_id:%d inst_num:%llu "
       "uop_num:%llu\n",
       m_cycle, cur_uop->m_core_id, cur_uop->m_thread_id, cur_uop->m_inst_num,
       cur_uop->m_uop_num);
 
-    // insert uops into retry queue
-    m_retry_queue.emplace_back(cur_uop);
-  } else {  // page fault
-    STAT_EVENT(PAGETABLE_MISS);
-
-    core_c *core = m_simBase->m_core_pointers[cur_uop->m_core_id];
-    if (cur_uop->m_parent_uop) {
-      core->m_per_thread_fault_parent_uops.emplace(cur_uop->m_thread_id,
-                                                   unordered_set<Counter>());
-      auto it = core->m_per_thread_fault_parent_uops[cur_uop->m_thread_id].find(
-        cur_uop->m_parent_uop->m_uop_num);
-      if (it ==
-          core->m_per_thread_fault_parent_uops[cur_uop->m_thread_id].end()) {
-        // try page table walks later since fault buffer is full
-        if (!m_fault_buffer.count(page_number) &&
-            m_fault_buffer_size <= m_fault_buffer.size()) {
-          cur_uop->m_state = OS_TRANS_FAULT_RETRY_QUEUE;
-          m_fault_retry_queue.emplace_back(cur_uop);
-          return;
-        }
-      }
-    }
-
-    // put fault request into fault buffer
-    m_fault_buffer.emplace(page_number);
-    m_fault_uops.emplace(page_number, list<uop_c *>());
-    m_fault_uops[page_number].emplace_back(cur_uop);
-
-    if (cur_uop->m_parent_uop) {
-      --cur_uop->m_parent_uop->m_num_page_table_walks;
-      if (cur_uop->m_parent_uop->m_num_page_table_walks)
-        core->m_per_thread_fault_parent_uops[cur_uop->m_thread_id].emplace(
-          cur_uop->m_parent_uop->m_uop_num);
-      else {
-        core->m_per_thread_fault_parent_uops[cur_uop->m_thread_id].erase(
-          cur_uop->m_parent_uop->m_uop_num);
-        core->m_per_thread_fault_parent_uops.erase(cur_uop->m_thread_id);
-      }
-    }
-
-    DEBUG(
-      "page fault at %llu - core_id:%d thread_id:%d inst_num:%llu "
-      "uop_num:%llu, page_number:%llx\n",
-      m_cycle, cur_uop->m_core_id, cur_uop->m_thread_id, cur_uop->m_inst_num,
-      cur_uop->m_uop_num, page_number);
-
-    cur_uop->m_state = OS_TRANS_FAULT_BUFFER;
-  }
+  // insert uops into retry queue
+  m_retry_queue.emplace_back(cur_uop);
 }
 
 void MMU::handle_page_faults() {

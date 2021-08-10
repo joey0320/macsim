@@ -1037,7 +1037,7 @@ void macsim_c::finalize() {
   // dump out stat files at the end of simulation
   m_ProcessorStats->saveStats();
 
-  cout << "Done\n";
+  cout << "[*] Simulation Finished Successfully\n";
 }
 
 // =======================================
