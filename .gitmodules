@@ -4,3 +4,6 @@
 [submodule "src/rwqueue"]
 	path = src/rwqueue
 	url = https://github.com/cameron314/readerwriterqueue
+[submodule "src/IOMMU-SIM"]
+	path = src/IOMMU-SIM
+	url = https://github.com/joey0320/IOMMU-SIM.git
