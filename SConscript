@@ -179,9 +179,6 @@ DRAMSIM2_srcs = [
   'src/DRAMSim2/Transaction.cpp',
 ]
 
-
-
-
 if flags['dram'] == '1':
   env.Library('dramsim', DRAMSIM2_srcs, CPPDEFINES=['NO_STORAGE', 'DEBUG_BUILD', 'LOG_OUTPUT'])
 
@@ -219,6 +216,29 @@ if flags['ramulator'] == '1':
   env['LIBPATH'] += [Dir('.')]
   env.Library('ramulator', ramulator_srcs, CPPDEFINES=['RAMULATOR'])
 
+
+#########################################################################################
+# IOMMU-SIM
+#########################################################################################
+IOMMU_srcs = [
+  'src/IOMMU-SIM/src/all_knobs.cc',
+  'src/IOMMU-SIM/src/cache_entry.cc',
+  'src/IOMMU-SIM/src/dram.cc',
+  'src/IOMMU-SIM/src/iommu.cc',
+  'src/IOMMU-SIM/src/knob.cc',
+  'src/IOMMU-SIM/src/pagetable.cc',
+  'src/IOMMU-SIM/src/pmem.cc',
+  'src/IOMMU-SIM/src/pts.cc',
+  'src/IOMMU-SIM/src/ptw.cc',
+  'src/IOMMU-SIM/src/ptwc.cc',
+  'src/IOMMU-SIM/src/tlb.cc',
+  'src/IOMMU-SIM/src/stats.cc',
+]
+
+if flags['iommu'] == '1':
+  env['CPPPATH'] += ['#src/IOMMU-SIM/src']
+  env['LIBPATH'] += [Dir('.')]
+  env.Library('iommu', IOMMU_srcs, CPPDEFINES=['NO_STORAGE', 'DEBUG_BUILD', 'LOG_OUTPUT'])
 #########################################################################################
 # MACSIM
 #########################################################################################
@@ -315,6 +335,9 @@ if flags['qsim'] == '1':
 
 if flags['ramulator'] == '1':
   libraries.append('ramulator')
+
+if flags['iommu'] == '1':
+    libraries.append('iommu')
 
 env.Program(
     'macsim',

@@ -29,6 +29,7 @@ def parse_arg():
   parser.add_option("--power", action="store_true", dest="power", default=False, help="EI Power")
   parser.add_option("--iris", action="store_true", dest="iris", default=False, help="IRIS")
   parser.add_option("--ramulator", action="store_true", dest="ramulator", default=False, help="Ramulator")
+  parser.add_option("--iommu", action="store_true", dest="iommu", default=False, help="IOMMU-SIM")
 
   return parser
 
@@ -39,7 +40,7 @@ def parse_arg():
 def build_test():
   build_option = ['', 'debug=1', 'gprof=1', 'qsim=1', 'pin_3_13_trace=1']
   build_dir    = ['.opt_build', '.dbg_build', '.gpf_build']
-  build_libs   = ['dram=1', 'power=1', 'iris=1', 'ramulator=1']
+  build_libs   = ['dram=1', 'power=1', 'iris=1', 'ramulator=1', 'iommu=1']
 
   for ii in range(0, len(build_option)):
     os.system('rm -rf %s' % build_dir[ii])
@@ -108,12 +109,18 @@ def main():
   if options.ramulator:
     cmd += 'ramulator=1 '
 
+  # IOMMU-SIM
+  if options.iommu:
+    cmd += 'iommu=1 '
+
   ## Parallel building 
   cmd += '-j %s ' % options.thread
   
   if options.clean:
     cmd += '-c'
 
+
+  print(cmd)
 
   ## run scons command
   os.system(cmd)

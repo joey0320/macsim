@@ -80,6 +80,7 @@ flags['gprof']         = Config.get('Build', 'gprof', fallback='0')
 flags['pin_3_13_trace'] = Config.get('Build', 'pin_3_13_trace', fallback='0')
 flags['val']           = Config.get('Build_Extra', 'val', fallback='0')
 flags['ramulator']     = Config.get('Library', 'ramulator', fallback='0')
+flags['iommu']         = Config.get('Library', 'iommu', fallback='0')
 
 ## Configuration from commandline
 flags['debug']         = ARGUMENTS.get('debug', flags['debug'])
@@ -91,17 +92,23 @@ flags['dram']          = ARGUMENTS.get('dram', flags['dram'])
 flags['val']           = ARGUMENTS.get('val', flags['val'])
 flags['qsim']          = ARGUMENTS.get('qsim', flags['qsim'])
 flags['ramulator']     = ARGUMENTS.get('ramulator', flags['ramulator'])
+flags['iommu']         = ARGUMENTS.get('iommu', flags['iommu'])
 
 
 ## Checkout DRAMSim2 copy
 if flags['dram'] == '1':
   if not os.path.exists('src/DRAMSim2'):
-    os.system('git clone git://github.com/dramninjasUMD/DRAMSim2.git src/DRAMSim2')
+    os.system('git clone https://github.com/joey0320/DRAMSim2.git src/DRAMSim2')
 
 ## Checkout Ramulator copy
 if flags['ramulator'] == '1':
   if not os.path.exists('src/ramulator'):
     os.system('git clone https://github.com/CMU-SAFARI/ramulator.git src/ramulator')
+
+## Checkout IOMMU-SIM copy
+if flags['iommu'] == '1':
+    if not os.path.exists('src/IOMMU-SIM'):
+        os.system('git clone --recursive https://github.com/joey0320/IOMMU-SIM.git src/IOMMU-SIM')
 
 ## Create stat/knobs
 SConscript('scripts/SConscript', exports='flags')
