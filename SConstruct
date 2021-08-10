@@ -35,7 +35,7 @@ def CheckCPP14():
     }
     '''
     context.Message('Checking for c++14 conformance...')
-    context.env.AppendUnique(CXXFLAGS=['-std=c++14'])
+    context.env.AppendUnique(CXXFLAGS=['-std=c++17'])
     result = context.TryCompile(cpp14_test, '.cpp')
     context.Result(result)
     return result
@@ -57,6 +57,7 @@ def pre_compile_check():
   if not conf.CheckCPP14():
     print('Error: Your compiler does not support c++14. Exit now...')
     os.system('cat config.log')
+    os.system('g++ --version')
     sys.exit()
 
 
