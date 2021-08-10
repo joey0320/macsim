@@ -63,6 +63,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "memory.h"
 #include "mmu.h"
 #include "statistics.h"
+#include "IOMMU-SIM/src/iommu.hh"
 
 using namespace std;
 
@@ -131,6 +132,13 @@ void MMU::initialize(macsim_c *simBase) {
     make_unique<ReplacementUnit>(m_simBase, m_free_frames_remaining);
   m_TLB = make_unique<TLB>(
     m_simBase, m_simBase->m_knobs->KNOB_TLB_NUM_ENTRY->getValue(), m_page_size);
+
+/* m_iommu_knobs_container = new IOMMUSIM::KnobsContainer(); */
+/* m_iommu_knobs = m_iommu_knobs_container->getAllKnobs(); */
+/* m_iommu_knobs_container->applyParamFile("configs.in"); */
+/* m_iommu_knobs_container->saveToFile("configs.out"); */
+  m_iommu = new IOMMUSIM::iommu_c();
+/* m_iommu->init(m_iommu_knobs); */
 
   m_tlb_latency = m_simBase->m_knobs->KNOB_TLB_ACCESS_LATENCY->getValue();
   m_walk_latency = m_simBase->m_knobs->KNOB_PAGE_TABLE_WALK_LATENCY->getValue();

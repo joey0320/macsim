@@ -49,6 +49,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "macsim.h"
 #include "uop.h"
 #include "tlb.h"
+#include "IOMMU-SIM/src/iommu.hh"
 
 class MMU  // Memory Management Unit
 {
@@ -160,6 +161,9 @@ private:
 
   unique_ptr<TLB> m_TLB;
   unique_ptr<ReplacementUnit> m_replacement_unit;
+/* IOMMUSIM::KnobsContainer *m_iommu_knobs_container; */
+/* IOMMUSIM::all_knobs_c *m_iommu_knobs; */
+  IOMMUSIM::iommu_c *m_iommu;
 
   long m_tlb_latency;
   long m_walk_latency;
