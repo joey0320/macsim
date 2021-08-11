@@ -136,6 +136,7 @@ public:
 
 private:
   void do_page_table_walks(uop_c *cur_uop);
+  void iommu_trans_done(Addr phys_addr, int unique_id);
 
   void begin_batch_processing();
   bool do_batch_processing();
@@ -161,11 +162,14 @@ private:
 
   unique_ptr<TLB> m_TLB;
   unique_ptr<ReplacementUnit> m_replacement_unit;
-/* IOMMUSIM::KnobsContainer *m_iommu_knobs_container; */
-/* IOMMUSIM::all_knobs_c *m_iommu_knobs; */
-  IOMMUSIM::iommu_c *m_iommu;
 
-  long m_tlb_latency;
+  // IOMMUSIM related variables
+  IOMMUSIM::KnobsContainer *m_iommu_knobs_container;
+  IOMMUSIM::all_knobs_c *m_iommu_knobs;
+  IOMMUSIM::iommu_c *m_iommu;
+  unordered_map<int, uop_c*> m_iommu_pending_uops; // unique_id -> *uop_c
+
+  long m_network_latency;
   long m_walk_latency;
   long m_fault_latency;
   long m_eviction_latency;

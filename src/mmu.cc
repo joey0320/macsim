@@ -133,14 +133,19 @@ void MMU::initialize(macsim_c *simBase) {
   m_TLB = make_unique<TLB>(
     m_simBase, m_simBase->m_knobs->KNOB_TLB_NUM_ENTRY->getValue(), m_page_size);
 
-/* m_iommu_knobs_container = new IOMMUSIM::KnobsContainer(); */
-/* m_iommu_knobs = m_iommu_knobs_container->getAllKnobs(); */
-/* m_iommu_knobs_container->applyParamFile("configs.in"); */
-/* m_iommu_knobs_container->saveToFile("configs.out"); */
+  m_iommu_knobs_container = new IOMMUSIM::KnobsContainer();
+  m_iommu_knobs = m_iommu_knobs_container->getAllKnobs();
+  m_iommu_knobs_container->applyParamFile("configs.in");
+  m_iommu_knobs_container->saveToFile("configs.out");
   m_iommu = new IOMMUSIM::iommu_c();
-/* m_iommu->init(m_iommu_knobs); */
+  m_iommu->init_sim(m_iommu_knobs);
 
-  m_tlb_latency = m_simBase->m_knobs->KNOB_TLB_ACCESS_LATENCY->getValue();
+  IOMMUSIM::TransactionCompleteCB *trans_complete_cb = 
+    new IOMMUSIM::Callback<MMU, void, Addr, int>(&(*this), &MMU::iommu_trans_done);
+
+  m_iommu->register_trans_callback(trans_complete_cb);
+
+  m_network_latency = m_simBase->m_knobs->KNOB_NETWORK_ACCESS_LATENCY->getValue();
   m_walk_latency = m_simBase->m_knobs->KNOB_PAGE_TABLE_WALK_LATENCY->getValue();
   m_fault_latency = m_simBase->m_knobs->KNOB_PAGE_FAULT_LATENCY->getValue();
   m_eviction_latency =
@@ -199,7 +204,7 @@ bool MMU::translate(uop_c *cur_uop) {
         .end())  // this page is already being serviced, so piggyback
     it->second.emplace_back(cur_uop);
   else {
-    Counter ready_cycle = m_cycle + m_tlb_latency;
+    Counter ready_cycle = m_cycle + m_network_latency;
     m_walk_queue_cycle.emplace(ready_cycle, list<Addr>());
     m_walk_queue_cycle[ready_cycle].emplace_back(page_number);
     m_walk_queue_page.emplace(page_number, list<uop_c *>());
@@ -212,6 +217,8 @@ bool MMU::translate(uop_c *cur_uop) {
 }
 
 void MMU::run_a_cycle(bool pll_lock) {
+  m_iommu->run_a_cycle();
+
   if (pll_lock) {
     ++m_cycle;
     return;
@@ -310,6 +317,8 @@ void MMU::run_a_cycle(bool pll_lock) {
   ++m_cycle;
 }
 
+// TODO : support IOMMUSIM
+// this is now the start of IOMMU requests that passed through the network
 void MMU::do_page_table_walks(uop_c *cur_uop) {
   Addr addr = cur_uop->m_vaddr;
   Addr page_number = get_page_number(addr);
@@ -326,29 +335,38 @@ void MMU::do_page_table_walks(uop_c *cur_uop) {
         forward_as_tuple(frame_number));
   }
 
-  it = m_page_table.find(page_number);
+  int unique_num = reinterpret_cast<std::uintptr_t>((void*)cur_uop);
 
-  Addr frame_number = it->second.frame_number;
+  m_iommu->add_request(page_number, unique_num);
+  assert(m_iommu_pending_uops.find(unique_num) == m_iommu_pending_uops.end());
+  m_iommu_pending_uops[unique_num] = cur_uop;
+}
+
+void 
+MMU::iommu_trans_done(Addr phys_addr, int unique_id) {
+/* std::cout << "phys addr : " << phys_addr << " unique_id : " << unique_id << std::endl; */
+
+  auto it_uop = m_iommu_pending_uops.find(unique_id);
+  uop_c *cur_uop = it_uop->second;
+  assert(cur_uop != NULL);
+  m_iommu_pending_uops.erase(unique_id);
+
+  Addr addr = cur_uop->m_vaddr;
+  Addr page_number = get_page_number(addr);
+  Addr page_offset = get_page_offset(addr);
+
+  auto it_pt = m_page_table.find(page_number);
+  Addr frame_number = it_pt->second.frame_number;
+
   cur_uop->m_paddr = (frame_number << m_offset_bits) | page_offset;
   cur_uop->m_state = OS_TRANS_RETRY_QUEUE;
   cur_uop->m_translated = true;
 
   if (cur_uop->m_parent_uop && cur_uop->m_parent_uop->m_num_page_table_walks)
-    --cur_uop->m_parent_uop->m_num_page_table_walks;
+  --cur_uop->m_parent_uop->m_num_page_table_walks;
 
   if (!m_TLB->lookup(addr)) m_TLB->insert(addr, frame_number);
   m_TLB->update(addr);
-
-  // no need to evict pages for now (not page faults)
-/* m_replacement_unit->update(page_number); */
-
-  STAT_EVENT(PAGETABLE_HIT);
-
-  DEBUG(
-      "page table hit at %llu - core_id:%d thread_id:%d inst_num:%llu "
-      "uop_num:%llu\n",
-      m_cycle, cur_uop->m_core_id, cur_uop->m_thread_id, cur_uop->m_inst_num,
-      cur_uop->m_uop_num);
 
   // insert uops into retry queue
   m_retry_queue.emplace_back(cur_uop);
