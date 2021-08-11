@@ -48,10 +48,26 @@ git clone -b intel_gpu https://github.com/gthparch/macsim.git
 
 download traces 
 /macsim/tools/download_trace_files.py
+
 ```
 ## build 
   ./build.py --ramulator 
   (please see /macsim/INSTALL)
+
+```
+git clone https://github.com/joey0320/macsim.git
+git checkout iommu
+git submodule init
+git submodule update
+docker pull joonho0320/gem5-ubuntu20:v2
+export UID=$(id -u)
+export GID=$(id -g)
+docker run -it --rm -u $UID:$GID -v /home/user_name/:/home/user_name/ joonho0320/gem5-ubuntu20:v2
+go to macsim directory
+python3 build.py --iommu --dram -j24 
+```
+## generating GPU traces
+Please take a look at macsim_src_dir/tools/gpu_tracegen
 
 ## People
 
@@ -77,3 +93,8 @@ If you have a question, please use github issue ticket.
 * Here are two example configurations of SST+MacSim.
   * A multi-socket system with cache coherence model: ![](http://comparch.gatech.edu/hparch/images/sst+macsim_conf_1.png)
   * A CPU+GPU heterogeneous system with shared memory: ![](http://comparch.gatech.edu/hparch/images/sst+macsim_conf_2.png)
+
+## TODO
+- shared DRAMSim btw macsim & IOMMUSim
+- network latency modeling
+- pagetable mappings btw macsim & IOMMUSim ?
