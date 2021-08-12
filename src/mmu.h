@@ -127,7 +127,7 @@ public:
   ~MMU() {
   }
 
-  void initialize(macsim_c *simBase);
+  void initialize(macsim_c *simBase, int argc, char **argv);
   void finalize();
   void run_a_cycle(bool);
 

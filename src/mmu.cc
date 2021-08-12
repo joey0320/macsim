@@ -115,7 +115,7 @@ Addr MMU::ReplacementUnit::getVictim() {
   return page_number;
 }
 
-void MMU::initialize(macsim_c *simBase) {
+void MMU::initialize(macsim_c *simBase, int argc, char **argv) {
   m_simBase = simBase;
 
   m_page_size = m_simBase->m_knobs->KNOB_PAGE_SIZE->getValue();
@@ -136,6 +136,10 @@ void MMU::initialize(macsim_c *simBase) {
   m_iommu_knobs_container = new IOMMUSIM::KnobsContainer();
   m_iommu_knobs = m_iommu_knobs_container->getAllKnobs();
   m_iommu_knobs_container->applyParamFile("configs.in");
+  char *p_invalid_argument = NULL;
+  if (!m_iommu_knobs_container->applyCommandLineArguments(argc, 
+                                                          argv, 
+                                                          &p_invalid_argument)) {};
   m_iommu_knobs_container->saveToFile("configs.out");
   m_iommu = new IOMMUSIM::iommu_c();
   m_iommu->init_sim(m_iommu_knobs);
