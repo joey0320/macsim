@@ -152,9 +152,9 @@ void macsim_c::init_knobs(int argc, char** argv) {
 
   // apply the supplied command line switches
   char* pInvalidArgument = NULL;
-  if (!m_knobsContainer->applyComandLineArguments(argc, argv,
-                                                  &pInvalidArgument)) {
-  }
+/* if (!m_knobsContainer->applyComandLineArguments(argc, argv, */
+/* &pInvalidArgument)) { */
+/* } */
 #endif
 
   // save the states of all knobs to a file
@@ -757,7 +757,7 @@ void macsim_c::initialize(int argc, char** argv) {
 
   // initialize MMU
   m_MMU = make_unique<MMU>();
-  m_MMU->initialize(m_simBase);
+  m_MMU->initialize(m_simBase, argc, argv);
 
   // open traces
   string trace_name_list = static_cast<string>(*KNOB(KNOB_TRACE_NAME_FILE));
