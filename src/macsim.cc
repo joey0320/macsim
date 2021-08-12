@@ -152,13 +152,15 @@ void macsim_c::init_knobs(int argc, char** argv) {
 
   // apply the supplied command line switches
   char* pInvalidArgument = NULL;
-/* if (!m_knobsContainer->applyComandLineArguments(argc, argv, */
-/* &pInvalidArgument)) { */
-/* } */
+  if (!m_knobsContainer->applyComandLineArguments(argc, argv,
+        &pInvalidArgument)) {
+  }
 #endif
 
+  std::string out_dir = m_knobs->KNOB_STATISTICS_OUT_DIRECTORY->getValue();
+
   // save the states of all knobs to a file
-  m_knobsContainer->saveToFile("params.out");
+  m_knobsContainer->saveToFile(out_dir + "/" + "params.out");
 }
 
 // =======================================

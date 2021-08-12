@@ -167,6 +167,12 @@ void KnobsContainer::applyValuesToKnobs(
   map<string, abstract_knob_c*, ltstr_s>::iterator knob_end = m_theKnobs.end();
   while (knob_iter != knob_end) {
     pKnob = (abstract_knob_c*)(knob_iter->second);
+
+    if (pKnob == NULL) {
+      ++knob_iter;
+      continue;
+    }
+
     if (!pKnob->getParentName().empty() &&
         m_theKnobs[pKnob->getParentName()]->wasValueProvided() &&
         !pKnob->wasValueProvided()) {

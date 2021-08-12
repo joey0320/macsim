@@ -53,6 +53,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <iostream>
 #include <iterator>
 #include <list>
+#include <string>
 
 /* macsim */
 #include "all_knobs.h"
@@ -140,7 +141,6 @@ void MMU::initialize(macsim_c *simBase, int argc, char **argv) {
   if (!m_iommu_knobs_container->applyCommandLineArguments(argc, 
                                                           argv, 
                                                           &p_invalid_argument)) {};
-  m_iommu_knobs_container->saveToFile("configs.out");
   m_iommu = new IOMMUSIM::iommu_c();
   m_iommu->init_sim(m_iommu_knobs);
 
@@ -167,7 +167,10 @@ void MMU::initialize(macsim_c *simBase, int argc, char **argv) {
 void MMU::finalize() {
   STAT_EVENT_N(UNIQUE_PAGE, m_unique_pages.size());
 
-  m_iommu->m_stats->saveToFile("stats/iommu-stats.txt");
+  std::string out_dir = m_simBase->m_knobs->KNOB_STATISTICS_OUT_DIRECTORY->getValue();
+
+  m_iommu->m_stats->saveToFile(out_dir + "/" + "iommu-stats.txt");
+  m_iommu_knobs_container->saveToFile(out_dir + "/" + "configs.out");
 }
 
 bool MMU::translate(uop_c *cur_uop) {
