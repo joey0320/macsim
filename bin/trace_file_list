@@ -1,2 +1,2 @@
 1
-../tools/x86_trace_generator/trace.txt
+/data/comparch_traces/GraphBIG-1K/bfs_data_thread_centric/kernel_config.txt
