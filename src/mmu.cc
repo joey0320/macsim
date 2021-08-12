@@ -162,6 +162,8 @@ void MMU::initialize(macsim_c *simBase) {
 
 void MMU::finalize() {
   STAT_EVENT_N(UNIQUE_PAGE, m_unique_pages.size());
+
+  m_iommu->m_stats->saveToFile("stats/iommu-stats.txt");
 }
 
 bool MMU::translate(uop_c *cur_uop) {
