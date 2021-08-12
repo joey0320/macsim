@@ -69,6 +69,32 @@ python3 build.py --iommu --dram -j24
 ## generating GPU traces
 Please take a look at macsim_src_dir/tools/gpu_tracegen
 
+## bin directory structure for iommu sim
+```
+bin
+|
+| build.py
+| configs.in
+| macsim
+| gen_iommu_config.py
+| run.sh
+|___ stats
+```
+
+## running iommusim + macsim
+0. go to the ```bin``` directory
+1. generate ```config-pool``` directory which contains various IOMMU parameters
+  - ```cp ../scripts/gen_iommu_config.py ./```
+  - ```python3 gen_iommu_config.py```
+2. copy the slurm run script to bin
+  - ```cp ../scripts/run.sh ./```
+3. set up ```trace_file_list``` to the ```kernel_config.txt``` path
+4. set up ```params.in```
+5. make a directory to contain stats
+  - ```mkdir stats```
+6. use slurm to run the process
+  - ```sbatch run.sh```
+
 ## People
 
 * Prof. Hyesoon Kim (Project Leader) at Georgia Tech 
