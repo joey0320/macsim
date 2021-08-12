@@ -183,6 +183,7 @@ bool MMU::translate(uop_c *cur_uop) {
     cur_uop->m_state = OS_TRANS_DONE;
     cur_uop->m_translated = true;
 
+    STAT_EVENT(TLB_HIT);
     DEBUG(
       "TLB hit at %llu - core_id:%d thread_id:%d inst_num:%llu "
       "uop_num:%llu\n",
@@ -190,6 +191,8 @@ bool MMU::translate(uop_c *cur_uop) {
       cur_uop->m_uop_num);
     return true;
   }
+
+  STAT_EVENT(TLB_MISS);
 
   DEBUG(
     "TLB miss at %llu - core_id:%d thread_id:%d inst_num:%llu uop_num:%llu\n",
