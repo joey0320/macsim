@@ -141,7 +141,16 @@ def main():
       if os.path.exists('macsim'):
         os.system('rm -f macsim')
       os.system('ln -s ../%s/macsim' % build_dir)
+      
+      if options.iommu:
+        if not os.path.isfile('./configs.in'):
+          os.system('cp ../src/IOMMU-SIM/configs/configs.in ./')
 
+        if not os.path.isfile('./run.sh'):
+          os.system('ln -s ../scripts/run.sh')
+
+        if not os.path.isfile('./get_stats.py'):
+          os.system('ln -s ../scripts/get_stats.py')
 
 
 if __name__ == '__main__':
