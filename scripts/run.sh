@@ -1,33 +1,20 @@
 #!/bin/bash
 #
-#SBATCH --job-name=test_job
+#SBATCH --job-name=macsim
 #SBATCH --output=./results/result.%j.txt
 #
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=joonho0320@gmail.com
 #
-#SBATCH --ntasks=1
-#SBATCH --array=0-6
+#SBATCH --ntasks=8
 
-ARGS=(1 4 8 16 32 64 128)
-PTW_CNT=${ARGS[${SLURM_ARRAY_TASK_ID}]}
-OUT_DIR="stats-${PTW_CNT}"
+IOMMU_EN_LIST=(0 1)
+PTW_CNT_LIST=(1 4 8 16 32 64 128)
 
-srun echo "================== running experiment : ${SLURM_ARRAY_TASK_ID} ========================="
-srun ./macsim --out=${OUT_DIR} --ptw_cnt=${PTW_CNT} --pts_entry=${PTW_CNT} --prmb_cnt=0
-srun mkdir ${OUT_DIR}
+for PTW_CNT in 1 4 8 16 32
+do
+  srun -N1 -n1 -c1 --exclusive mkdir --out=saxpy-${PTW_CNT}
+  srun -N1 -n1 -c1 --exclusive ./macsim --out=saxpy-${PTW_CNT} --ptw_cnt=${PTW_CNT} --pts_entry=${PTW_CNT} --prmb_cnt=${PTW_CNT}
+done
+wait
 
-srun echo "=============================  IOMMU SIM CONFIGURATION ================================="
-srun cat "./${OUT_DIR}/configs.out"
-
-srun echo "=================================  IOMMU SIM STATS ====================================="
-srun cat "./${OUT_DIR}/iommu-stats.txt"
-
-srun echo "============================  macsim SIM CONFIGURATION ================================="
-srun cat "./${OUT_DIR}/params.out"
-
-srun echo "============================  macsim SIM STATS ================================="
-srun cat ./${OUT_DIR}/general.stat.out
-srun cat ./${OUT_DIR}/core.stat.out
-srun cat ./${OUT_DIR}/memory.stat.out
-srun cat ./${OUT_DIR}/inst.stat.out
