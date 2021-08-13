@@ -145,7 +145,7 @@ void MMU::initialize(macsim_c *simBase, int argc, char **argv) {
   m_iommu->init_sim(m_iommu_knobs);
 
   IOMMUSIM::TransactionCompleteCB *trans_complete_cb = 
-    new IOMMUSIM::Callback<MMU, void, Addr, int>(&(*this), &MMU::iommu_trans_done);
+    new IOMMUSIM::Callback<MMU, void, Addr, Addr>(&(*this), &MMU::iommu_trans_done);
 
   m_iommu->register_trans_callback(trans_complete_cb);
 
@@ -273,13 +273,13 @@ void MMU::do_page_table_walks(uop_c *cur_uop) {
 }
 
 void 
-MMU::iommu_trans_done(Addr phys_addr, int unique_id) {
+MMU::iommu_trans_done(Addr phys_addr, Addr vpn) {
 /* std::cout << "phys addr : " << phys_addr << " unique_id : " << unique_id << std::endl; */
 
-  auto it_uop = m_iommu_pending_uops.find(unique_id);
+  auto it_uop = m_iommu_pending_uops.find(vpn);
   uop_c *cur_uop = it_uop->second;
   assert(cur_uop != NULL);
-  m_iommu_pending_uops.erase(unique_id);
+  m_iommu_pending_uops.erase(vpn);
 
   auto ready_cycle = 
     m_cycle + m_simBase->m_knobs->KNOB_NETWORK_ACCESS_LATENCY->getValue();

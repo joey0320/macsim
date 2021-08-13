@@ -136,7 +136,7 @@ public:
 
 private:
   void do_page_table_walks(uop_c *cur_uop);
-  void iommu_trans_done(Addr phys_addr, int unique_id);
+  void iommu_trans_done(Addr phys_addr, Addr vpn);
   void process_retry_queue();
   void process_page_walk_queue();
   void process_iommu_done_queue();
