@@ -18,7 +18,12 @@ PTW_CNT_ID=$((${SLURM_ARRAY_TASK_ID}%7))
 IOMMU_EN=${IOMMU_EN_LIST[${IOMMU_EN_ID}]}
 PTW_CNT=${PTW_CNT_LIST[${PTW_CNT_ID}]}
 
-OUT_DIR="saxpy-${PTW_CNT}-${IOMMU_EN}"
+OUT_DIR="triangle_count-${PTW_CNT}-${IOMMU_EN}"
 
 srun mkdir ${OUT_DIR}
-srun ./macsim --out=${OUT_DIR} --ptw_cnt=${PTW_CNT} --pts_entry=${PTW_CNT} --prmb_cnt=0
+srun ./macsim --out=${OUT_DIR} --ptw_cnt=${PTW_CNT} --pts_entry=${PTW_CNT} --prmb_cnt=0 --enable_physical_mapping=${IOMMU_EN}
+srun cat "${OUT_DIR}/params.out"
+srun cat "${OUT_DIR}/configs.out"
+srun cat "${OUT_DIR}/iommu-stats.txt"
+srun cat "${OUT_DIR}/general.stat.out"
+srun cat "${OUT_DIR}/memory.stat.out"

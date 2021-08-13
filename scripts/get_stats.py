@@ -87,6 +87,7 @@ def get_val_list(key_list, file_path, index=-1):
   return list(zip(key_list, val_list))
 
 def process_file(file_path):
+  print(file_path)
   iommu_config = get_val_list(iommu_knob_list, file_path)
   iommu_stats = get_val_list(iommu_stat_list, file_path)
 
