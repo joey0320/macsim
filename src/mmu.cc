@@ -236,6 +236,80 @@ void MMU::run_a_cycle(bool pll_lock) {
     return;
   }
 
+  process_retry_queue();
+
+  process_page_walk_queue();
+
+  process_iommu_done_queue();
+
+  ++m_cycle;
+}
+
+// TODO : support IOMMUSIM
+// this is now the start of IOMMU requests that passed through the network
+void MMU::do_page_table_walks(uop_c *cur_uop) {
+  Addr addr = cur_uop->m_vaddr;
+  Addr page_number = get_page_number(addr);
+  Addr page_offset = get_page_offset(addr);
+
+  auto it = m_page_table.find(page_number);
+
+  // assume no page faults for now
+  if (it == m_page_table.end()) {
+    auto frame_number = ++m_frame_to_allocate;
+
+    // allocate an entry in the page table
+    m_page_table.emplace(piecewise_construct, forward_as_tuple(page_number),
+        forward_as_tuple(frame_number));
+  }
+
+  int unique_num = reinterpret_cast<std::uintptr_t>((void*)cur_uop);
+
+  // FIXME : should add queue in case the IOMMU cannot serve requests
+  // probably not imporant in the perspective of cycles
+  m_iommu->add_request(page_number, unique_num);
+  assert(m_iommu_pending_uops.find(unique_num) == m_iommu_pending_uops.end());
+  m_iommu_pending_uops[unique_num] = cur_uop;
+}
+
+void 
+MMU::iommu_trans_done(Addr phys_addr, int unique_id) {
+/* std::cout << "phys addr : " << phys_addr << " unique_id : " << unique_id << std::endl; */
+
+  auto it_uop = m_iommu_pending_uops.find(unique_id);
+  uop_c *cur_uop = it_uop->second;
+  assert(cur_uop != NULL);
+  m_iommu_pending_uops.erase(unique_id);
+
+  auto ready_cycle = 
+    m_cycle + m_simBase->m_knobs->KNOB_NETWORK_ACCESS_LATENCY->getValue();
+  auto it = m_iommu_done_q.find(ready_cycle);
+  if (it == m_iommu_done_q.end()) {
+    m_iommu_done_q.emplace(ready_cycle, list<uop_c *>());
+  }
+  m_iommu_done_q[ready_cycle].emplace_back(cur_uop);
+}
+
+void
+MMU::process_page_walk_queue() {
+  // do page table walks
+  for (auto it = m_walk_queue_cycle.begin(); it != m_walk_queue_cycle.end();
+       /* do nothing */) {
+    if (it->first <= m_cycle) {
+      auto &page_list = it->second;
+      for (auto &&p : page_list) {
+        auto &uop_list = m_walk_queue_page[p];
+        for (auto &&uop : uop_list) do_page_table_walks(uop);
+        m_walk_queue_page.erase(p);
+      }
+      it = m_walk_queue_cycle.erase(it);
+    } else
+      break;
+  }
+}
+
+void
+MMU::process_retry_queue() {
   // re-access dcache now that translation is done
   if (!m_retry_queue.empty()) {
     for (auto it = m_retry_queue.begin(); it != m_retry_queue.end();
@@ -297,91 +371,42 @@ void MMU::run_a_cycle(bool pll_lock) {
       }
     }
   }
+}
 
-  // retry page faults once a new batch processing begins
-  // i.e., right after the fault buffer drains
-/* if (m_fault_buffer.empty() && !m_fault_retry_queue.empty()) { */
-/* list<uop_c *> m_fault_retry_queue_processing; */
-/* std::move(m_fault_retry_queue.begin(), m_fault_retry_queue.end(), */
-/* std::back_inserter(m_fault_retry_queue_processing)); */
-/* m_fault_retry_queue.clear(); */
-
-/* for (auto &&uop : m_fault_retry_queue_processing) do_page_table_walks(uop); */
-
-/* m_fault_retry_queue_processing.clear(); */
-/* } */
-
-  // do page table walks
-  for (auto it = m_walk_queue_cycle.begin(); it != m_walk_queue_cycle.end();
-       /* do nothing */) {
+void
+MMU::process_iommu_done_queue() {
+  for (auto it = m_iommu_done_q.begin(); it != m_iommu_done_q.end(); ) {
     if (it->first <= m_cycle) {
-      auto &page_list = it->second;
-      for (auto &&p : page_list) {
-        auto &uop_list = m_walk_queue_page[p];
-        for (auto &&uop : uop_list) do_page_table_walks(uop);
-        m_walk_queue_page.erase(p);
-      }
-      it = m_walk_queue_cycle.erase(it);
+      auto &uop_list = it->second;
+      for (auto &&uop : uop_list)
+        fill_retry_queue(uop);
+      it = m_iommu_done_q.erase(it);
     } else
       break;
   }
-
-  ++m_cycle;
 }
 
-// TODO : support IOMMUSIM
-// this is now the start of IOMMU requests that passed through the network
-void MMU::do_page_table_walks(uop_c *cur_uop) {
-  Addr addr = cur_uop->m_vaddr;
-  Addr page_number = get_page_number(addr);
-  Addr page_offset = get_page_offset(addr);
-
-  auto it = m_page_table.find(page_number);
-
-  // assume no page faults for now
-  if (it == m_page_table.end()) {
-    auto frame_number = ++m_frame_to_allocate;
-
-    // allocate an entry in the page table
-    m_page_table.emplace(piecewise_construct, forward_as_tuple(page_number),
-        forward_as_tuple(frame_number));
-  }
-
-  int unique_num = reinterpret_cast<std::uintptr_t>((void*)cur_uop);
-
-  m_iommu->add_request(page_number, unique_num);
-  assert(m_iommu_pending_uops.find(unique_num) == m_iommu_pending_uops.end());
-  m_iommu_pending_uops[unique_num] = cur_uop;
-}
-
-void 
-MMU::iommu_trans_done(Addr phys_addr, int unique_id) {
-/* std::cout << "phys addr : " << phys_addr << " unique_id : " << unique_id << std::endl; */
-
-  auto it_uop = m_iommu_pending_uops.find(unique_id);
-  uop_c *cur_uop = it_uop->second;
-  assert(cur_uop != NULL);
-  m_iommu_pending_uops.erase(unique_id);
-
-  Addr addr = cur_uop->m_vaddr;
+void
+MMU::fill_retry_queue(uop_c *uop) {
+  Addr addr = uop->m_vaddr;
   Addr page_number = get_page_number(addr);
   Addr page_offset = get_page_offset(addr);
 
   auto it_pt = m_page_table.find(page_number);
   Addr frame_number = it_pt->second.frame_number;
 
-  cur_uop->m_paddr = (frame_number << m_offset_bits) | page_offset;
-  cur_uop->m_state = OS_TRANS_RETRY_QUEUE;
-  cur_uop->m_translated = true;
+  uop->m_paddr = (frame_number << m_offset_bits) | page_offset;
+  uop->m_state = OS_TRANS_RETRY_QUEUE;
+  uop->m_translated = true;
 
-  if (cur_uop->m_parent_uop && cur_uop->m_parent_uop->m_num_page_table_walks)
-  --cur_uop->m_parent_uop->m_num_page_table_walks;
+  if (uop->m_parent_uop && uop->m_parent_uop->m_num_page_table_walks)
+  --uop->m_parent_uop->m_num_page_table_walks;
 
   if (!m_TLB->lookup(addr)) m_TLB->insert(addr, frame_number);
   m_TLB->update(addr);
 
   // insert uops into retry queue
-  m_retry_queue.emplace_back(cur_uop);
+  m_retry_queue.emplace_back(uop);
 }
 
 void MMU::handle_page_faults() {

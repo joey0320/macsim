@@ -137,6 +137,10 @@ public:
 private:
   void do_page_table_walks(uop_c *cur_uop);
   void iommu_trans_done(Addr phys_addr, int unique_id);
+  void process_retry_queue();
+  void process_page_walk_queue();
+  void process_iommu_done_queue();
+  void fill_retry_queue(uop_c* uop);
 
   void begin_batch_processing();
   bool do_batch_processing();
@@ -168,6 +172,7 @@ private:
   IOMMUSIM::all_knobs_c *m_iommu_knobs;
   IOMMUSIM::iommu_c *m_iommu;
   unordered_map<int, uop_c*> m_iommu_pending_uops; // unique_id -> *uop_c
+  unordered_map<Counter, list<uop_c *>> m_iommu_done_q;
 
   long m_network_latency;
   long m_walk_latency;
